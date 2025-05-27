@@ -24,6 +24,7 @@ basic-mcp-server/
 ├── README.md                 # Project documentation
 ├── example_client.py         # Command-line client example
 ├── examples/                 # Example clients
+│   ├── example_client.py     # Command-line client example
 │   └── websocket_client.html # Browser WebSocket client
 ├── mcp_server.py             # Main entry point
 └── mcp_server/               # Core package
