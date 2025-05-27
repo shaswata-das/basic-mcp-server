@@ -32,7 +32,7 @@ class MCPServerConfig:
     description: str = "MCP Server with multiple AI model integration"
     
     # Transport settings
-    transport_type: str = "stdio"  # 'stdio', 'tcp', or 'websocket'
+    transport_types: list = None  # List of transports: ['stdio', 'tcp', 'websocket']
     tcp_host: str = "127.0.0.1"
     tcp_port: int = 9000
     ws_port: int = 8765
@@ -76,6 +76,10 @@ class MCPServerConfig:
                 "gpt-4",
                 "gpt-3.5-turbo"
             ]
+            
+        # Set default transport types if not provided
+        if self.transport_types is None:
+            self.transport_types = ["stdio"]
     
     @classmethod
     def from_env(cls) -> "MCPServerConfig":
@@ -90,7 +94,8 @@ class MCPServerConfig:
             config.version = os.environ.get("MCP_SERVER_VERSION")
             
         if os.environ.get("MCP_TRANSPORT_TYPE"):
-            config.transport_type = os.environ.get("MCP_TRANSPORT_TYPE")
+            transport_types = os.environ.get("MCP_TRANSPORT_TYPE").split(",")
+            config.transport_types = [t.strip() for t in transport_types]
             
         if os.environ.get("MCP_TCP_HOST"):
             config.tcp_host = os.environ.get("MCP_TCP_HOST")
@@ -169,8 +174,11 @@ class MCPServerConfig:
         if args.get("name"):
             config.name = args.get("name")
             
-        if args.get("tcp"):
-            config.transport_type = "tcp"
+        if args.get("tcp") and "tcp" not in config.transport_types:
+            config.transport_types.append("tcp")
+            
+        if args.get("websocket") and "websocket" not in config.transport_types:
+            config.transport_types.append("websocket")
             
         if args.get("host"):
             config.tcp_host = args.get("host")

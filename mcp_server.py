@@ -293,34 +293,58 @@ async def main():
     # Create server with service registry
     server = AIMCPServerApp(config, ai_services)
     
-    # Determine transport type from args and config
-    transport_type = 'stdio'  # default
-    if args.tcp:
-        transport_type = 'tcp'
-    elif args.websocket:
-        transport_type = 'websocket'
-    elif config.transport_type in ['tcp', 'websocket']:
-        transport_type = config.transport_type
-
     # Set host and port
     host = args.host or config.tcp_host
     
-    # Create and start appropriate transport
-    if transport_type == 'tcp':
+    # Create transports based on configuration
+    transports = []
+    
+    # Check if stdio is enabled
+    if 'stdio' in config.transport_types:
+        logging.info("Setting up stdio transport")
+        transports.append(StdioTransport(server))
+    
+    # Check if TCP is enabled
+    if 'tcp' in config.transport_types:
         port = args.port or config.tcp_port
-        logging.info(f"Starting TCP transport on {host}:{port}")
-        transport = TCPTransport(server, host, port)
-        await transport.start()
-    elif transport_type == 'websocket':
-        port = args.port or getattr(config, 'ws_port', 8765)  # Default WebSocket port
-        ws_path = args.ws_path or getattr(config, 'ws_path', '/')
-        logging.info(f"Starting WebSocket transport on {host}:{port}{ws_path}")
-        transport = WebSocketTransport(server, host, port, path=ws_path)
-        await transport.start()
+        logging.info(f"Setting up TCP transport on {host}:{port}")
+        transports.append(TCPTransport(server, host, port))
+    
+    # Check if WebSocket is enabled
+    if 'websocket' in config.transport_types:
+        port = args.port or config.ws_port
+        ws_path = args.ws_path or config.ws_path
+        logging.info(f"Setting up WebSocket transport on {host}:{port}{ws_path}")
+        transports.append(WebSocketTransport(server, host, port, path=ws_path))
+    
+    if not transports:
+        logging.warning("No transports configured. Defaulting to stdio.")
+        transports.append(StdioTransport(server))
+    
+    # Start all transports
+    if len(transports) == 1:
+        # Simple case - just one transport
+        await transports[0].start()
     else:
-        logging.info("Starting stdio transport")
-        transport = StdioTransport(server)
-        await transport.start()
+        # Multiple transports - run them concurrently
+        logging.info(f"Starting {len(transports)} transports")
+        
+        # Create tasks for each transport
+        transport_tasks = [asyncio.create_task(transport.start()) for transport in transports]
+        
+        # Wait for any transport to complete (or all if all complete normally)
+        done, pending = await asyncio.wait(
+            transport_tasks, 
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        
+        # If any transport ended, cancel the others
+        for task in pending:
+            task.cancel()
+        
+        # Wait for the cancellations to complete
+        if pending:
+            await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
 
 
 if __name__ == "__main__":
