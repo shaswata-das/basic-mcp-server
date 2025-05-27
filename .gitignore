@@ -36,11 +36,12 @@ ENV/
 Thumbs.db
 
 # Environment variables
+.env
 .env.local
 .env.development
 .env.production
-# Do not ignore example .env
-!.env
+# Do not ignore example .env files
+!.env.example
 
 # Logs
 *.log
