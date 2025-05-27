@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Server WebSocket Client</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        .control-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .connection-status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .connecting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            box-sizing: border-box;
+            font-family: monospace;
+            margin-bottom: 10px;
+        }
+        input, select, button {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .response {
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #e9ecef;
+            font-family: monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .tab {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: #fff;
+            border-bottom: 1px solid #fff;
+            position: relative;
+            bottom: -1px;
+        }
+        .tab-content {
+            display: none;
+            border: 1px solid #ddd;
+            border-radius: 0 4px 4px 4px;
+            padding: 15px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .examples {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .example-btn {
+            background-color: #6c757d;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>MCP Server WebSocket Client</h1>
+    
+    <div class="container">
+        <div class="panel">
+            <h2>Connection</h2>
+            <div class="control-panel">
+                <div>
+                    <label for="ws-url">WebSocket URL:</label>
+                    <input type="text" id="ws-url" value="ws://localhost:8765/" style="width: 300px;">
+                </div>
+                <div>
+                    <button id="connect-btn">Connect</button>
+                    <button id="disconnect-btn" disabled>Disconnect</button>
+                    <span id="connection-status" class="connection-status disconnected">Disconnected</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Send Request</h2>
+            
+            <div class="tabs">
+                <div class="tab active" data-tab="ai-message">AI Message</div>
+                <div class="tab" data-tab="custom-request">Custom Request</div>
+            </div>
+            
+            <div class="tab-content active" id="ai-message">
+                <div class="examples">
+                    <button class="example-btn" data-example="claude">Claude Example</button>
+                    <button class="example-btn" data-example="openai">OpenAI Example</button>
+                    <button class="example-btn" data-example="dynamic">Dynamic Service</button>
+                </div>
+                
+                <div>
+                    <label for="prompt">Prompt:</label>
+                    <textarea id="prompt" placeholder="Enter your prompt...">What is the capital of France?</textarea>
+                </div>
+                
+                <div>
+                    <label for="service">AI Service:</label>
+                    <select id="service">
+                        <option value="">Default</option>
+                        <option value="claude">Claude</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="mock">Mock</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="model">Model (optional):</label>
+                    <input type="text" id="model" placeholder="Leave empty for default">
+                </div>
+                
+                <div>
+                    <button id="send-ai-btn" disabled>Send AI Request</button>
+                </div>
+            </div>
+            
+            <div class="tab-content" id="custom-request">
+                <div class="examples">
+                    <button class="example-btn" data-example="tools-list">Tools List</button>
+                    <button class="example-btn" data-example="initialize">Initialize</button>
+                    <button class="example-btn" data-example="resources-list">Resources List</button>
+                </div>
+                
+                <div>
+                    <label for="custom-request">JSON-RPC Request:</label>
+                    <textarea id="custom-request" placeholder="Enter JSON-RPC request..."></textarea>
+                </div>
+                
+                <div>
+                    <button id="send-custom-btn" disabled>Send Custom Request</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Response</h2>
+            <div class="response" id="response">No response yet...</div>
+        </div>
+    </div>
+    
+    <script>
+        // WebSocket connection
+        let socket = null;
+        let requestId = 1;
+        
+        // DOM elements
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const connectionStatus = document.getElementById('connection-status');
+        const wsUrl = document.getElementById('ws-url');
+        const sendAiBtn = document.getElementById('send-ai-btn');
+        const sendCustomBtn = document.getElementById('send-custom-btn');
+        const promptInput = document.getElementById('prompt');
+        const serviceSelect = document.getElementById('service');
+        const modelInput = document.getElementById('model');
+        const customRequestInput = document.getElementById('custom-request');
+        const responseOutput = document.getElementById('response');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const exampleBtns = document.querySelectorAll('.example-btn');
+        
+        // Connect to WebSocket
+        connectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.close();
+            }
+            
+            try {
+                const url = wsUrl.value.trim();
+                socket = new WebSocket(url);
+                updateConnectionStatus('connecting');
+                
+                socket.onopen = (event) => {
+                    updateConnectionStatus('connected');
+                    enableButtons(true);
+                };
+                
+                socket.onclose = (event) => {
+                    updateConnectionStatus('disconnected');
+                    enableButtons(false);
+                    socket = null;
+                };
+                
+                socket.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    updateConnectionStatus('disconnected');
+                    enableButtons(false);
+                };
+                
+                socket.onmessage = (event) => {
+                    try {
+                        const response = JSON.parse(event.data);
+                        displayResponse(response);
+                    } catch (error) {
+                        displayResponse({ error: 'Failed to parse response: ' + error.message });
+                    }
+                };
+            } catch (error) {
+                console.error('Connection error:', error);
+                updateConnectionStatus('disconnected');
+            }
+        });
+        
+        // Disconnect
+        disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.close();
+            }
+        });
+        
+        // Send AI message request
+        sendAiBtn.addEventListener('click', () => {
+            const prompt = promptInput.value.trim();
+            if (!prompt) {
+                alert('Please enter a prompt.');
+                return;
+            }
+            
+            const service = serviceSelect.value;
+            const model = modelInput.value.trim();
+            
+            const request = {
+                jsonrpc: '2.0',
+                method: 'tools/call',
+                params: {
+                    name: 'ai/message',
+                    arguments: {
+                        prompt: prompt
+                    }
+                },
+                id: requestId++
+            };
+            
+            if (service) {
+                request.params.arguments.service_name = service;
+            }
+            
+            if (model) {
+                request.params.arguments.model = model;
+            }
+            
+            sendRequest(request);
+        });
+        
+        // Send custom request
+        sendCustomBtn.addEventListener('click', () => {
+            try {
+                const requestText = customRequestInput.value.trim();
+                if (!requestText) {
+                    alert('Please enter a JSON-RPC request.');
+                    return;
+                }
+                
+                const request = JSON.parse(requestText);
+                sendRequest(request);
+            } catch (error) {
+                alert('Invalid JSON: ' + error.message);
+            }
+        });
+        
+        // Send request to server
+        function sendRequest(request) {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                alert('WebSocket is not connected.');
+                return;
+            }
+            
+            try {
+                socket.send(JSON.stringify(request));
+                displayResponse({ info: 'Request sent, waiting for response...' });
+            } catch (error) {
+                displayResponse({ error: 'Failed to send request: ' + error.message });
+            }
+        }
+        
+        // Update connection status display
+        function updateConnectionStatus(status) {
+            connectionStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            connectionStatus.className = 'connection-status ' + status;
+        }
+        
+        // Enable or disable buttons based on connection status
+        function enableButtons(connected) {
+            connectBtn.disabled = connected;
+            disconnectBtn.disabled = !connected;
+            sendAiBtn.disabled = !connected;
+            sendCustomBtn.disabled = !connected;
+        }
+        
+        // Display response in the output area
+        function displayResponse(response) {
+            responseOutput.textContent = JSON.stringify(response, null, 2);
+        }
+        
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.getAttribute('data-tab');
+                
+                // Update active tab
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Update active content
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === tabName) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+        });
+        
+        // Example buttons
+        exampleBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const example = btn.getAttribute('data-example');
+                
+                // Set example based on type
+                if (btn.parentElement.parentElement.id === 'custom-request') {
+                    // Custom request examples
+                    if (example === 'tools-list') {
+                        customRequestInput.value = JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'tools/list',
+                            id: requestId
+                        }, null, 2);
+                    } else if (example === 'initialize') {
+                        customRequestInput.value = JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'initialize',
+                            id: requestId
+                        }, null, 2);
+                    } else if (example === 'resources-list') {
+                        customRequestInput.value = JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'resources/list',
+                            id: requestId
+                        }, null, 2);
+                    }
+                } else {
+                    // AI message examples
+                    if (example === 'claude') {
+                        promptInput.value = 'Write a short poem about artificial intelligence.';
+                        serviceSelect.value = 'claude';
+                        modelInput.value = '';
+                    } else if (example === 'openai') {
+                        promptInput.value = 'Explain quantum computing in simple terms.';
+                        serviceSelect.value = 'openai';
+                        modelInput.value = '';
+                    } else if (example === 'dynamic') {
+                        promptInput.value = 'What are the benefits of renewable energy?';
+                        serviceSelect.value = '';
+                        modelInput.value = '';
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

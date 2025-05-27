@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+"""
+MCP Server with Claude API Integration
+
+A modular Model Context Protocol server that communicates with Claude by Anthropic.
+Built with SOLID principles for maintainability and extensibility.
+
+Environment variables can be configured in the .env file.
+"""
+
+import asyncio
+import argparse
+import logging
+import sys
+import os
+from pathlib import Path
+
+from mcp_server.config.settings import MCPServerConfig
+from mcp_server.models.json_rpc import JSONRPCErrorCode
+from mcp_server.services import create_ai_services_from_config, AIServiceRegistry
+from mcp_server.core.server import MCPServer
+from mcp_server.transports.base import StdioTransport, TCPTransport
+from mcp_server.transports.websocket import WebSocketTransport
+from mcp_server.handlers.base_handlers import (
+    InitializeHandler,
+    ToolsListHandler,
+    ToolsCallHandler,
+    ResourcesListHandler,
+    ResourcesReadHandler
+)
+from mcp_server.handlers.system_handlers import (
+    SystemInfoHandler,
+    SystemHealthHandler
+)
+
+
+class AIMCPServerApp(MCPServer):
+    """MCP Server Application with AI model integration"""
+    
+    def __init__(self, config: MCPServerConfig, ai_services: AIServiceRegistry):
+        """Initialize with configuration and AI service registry"""
+        super().__init__(config, None)  # Don't pass ai_service to parent
+        self.ai_services = ai_services  # Store the registry instead
+    
+    def initialize(self):
+        """Initialize server components"""
+        # Setup logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # Setup tools
+        self._setup_default_tools()
+        self._setup_ai_tools()  # Unified AI tools
+        self._setup_system_tools()  # Add system tools
+        self._setup_default_resources()
+        
+        # Register method handlers
+        self.register_method_handler("initialize", 
+            InitializeHandler(self.name, self.version))
+        
+        self.register_method_handler("tools/list", 
+            ToolsListHandler(self.tools))
+        
+        self.register_method_handler("tools/call", 
+            ToolsCallHandler(self.tools, self.ai_services))
+        
+        self.register_method_handler("resources/list", 
+            ResourcesListHandler(self.resources))
+        
+        self.register_method_handler("resources/read", 
+            ResourcesReadHandler(self.name, self.version, self.tools, self.resources))
+        
+        # Register system handlers
+        self.register_method_handler("system/info", SystemInfoHandler())
+        self.register_method_handler("system/health", SystemHealthHandler(
+            service_dependencies=["claude_api"] if self.ai_service else []
+        ))
+    
+    def _setup_default_tools(self):
+        """Setup default tools the server provides"""
+        self.register_tool("echo", {
+            "name": "echo",
+            "description": "Echo back the provided text",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Text to echo back"
+                    }
+                },
+                "required": ["text"]
+            }
+        })
+        
+        self.register_tool("calculate", {
+            "name": "calculate",
+            "description": "Perform basic arithmetic calculations",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "expression": {
+                        "type": "string",
+                        "description": "Mathematical expression to evaluate (e.g., '2 + 3 * 4')"
+                    }
+                },
+                "required": ["expression"]
+            }
+        })
+    
+    def _setup_ai_tools(self):
+        """Setup AI tools with dynamic service selection"""
+        # Get available services
+        available_services = list(self.ai_services.list_services().keys())
+        
+        # Get default models for each service
+        default_models = {
+            "claude": self.config.claude_default_model,
+            "openai": self.config.openai_default_model,
+            "mock": "mock-model"
+        }
+        
+        # Register the unified AI message tool
+        self.register_tool("ai/message", {
+            "name": "ai/message",
+            "description": "Send a message to any configured AI service and get a response",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "The message to send to the AI"
+                    },
+                    "service_name": {
+                        "type": "string",
+                        "description": f"AI service to use (defaults to {self.ai_services.default_service or 'server configuration'})",
+                        "enum": available_services
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Model to use (optional - each service will use its default model if not specified)"
+                    },
+                    "max_tokens": {
+                        "type": "integer",
+                        "description": "Maximum number of tokens in response (optional - uses service defaults)"
+                    },
+                    "temperature": {
+                        "type": "number",
+                        "description": "Temperature for response generation (optional - uses service defaults)"
+                    },
+                    "system": {
+                        "type": "string",
+                        "description": "Optional system prompt to guide the model's behavior"
+                    }
+                },
+                "required": ["prompt"]
+            }
+        })
+        
+        # Register the unified AI streaming tool
+        self.register_tool("ai/stream", {
+            "name": "ai/stream",
+            "description": "Stream a response from any configured AI service (TCP mode only)",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "The message to send to the AI"
+                    },
+                    "service_name": {
+                        "type": "string",
+                        "description": "AI service to use (defaults to server configuration)",
+                        "enum": available_services
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Model to use (specific to the service)"
+                    },
+                    "max_tokens": {
+                        "type": "integer",
+                        "description": "Maximum number of tokens in response"
+                    },
+                    "temperature": {
+                        "type": "number",
+                        "description": "Temperature for response generation"
+                    },
+                    "system": {
+                        "type": "string",
+                        "description": "Optional system prompt to guide the model's behavior"
+                    }
+                },
+                "required": ["prompt"]
+            }
+        })
+        
+        # For backward compatibility, keep the service-specific tools
+        self._setup_claude_tools()
+        self._setup_openai_tools()
+    
+    def _setup_system_tools(self):
+        """Setup system-related tools"""
+        self.register_tool("system/info", {
+            "name": "system/info",
+            "description": "Get detailed system information including CPU, memory, and disk usage",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}  # No parameters needed
+            }
+        })
+        
+        self.register_tool("system/health", {
+            "name": "system/health",
+            "description": "Check the health status of the server and its dependencies",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}  # No parameters needed
+            }
+        })
+    
+    def _setup_default_resources(self):
+        """Setup default resources the server provides"""
+        self.register_resource("mcp://server/info", {
+            "uri": "mcp://server/info",
+            "name": "Server Information",
+            "description": "Information about this MCP server",
+            "mimeType": "application/json"
+        })
+
+
+async def main():
+    """Main entry point"""
+    parser = argparse.ArgumentParser(description='AI MCP Server with JSON-RPC')
+    
+    # Transport options
+    transport_group = parser.add_argument_group('Transport Options')
+    transport_type = transport_group.add_mutually_exclusive_group()
+    transport_type.add_argument('--tcp', action='store_true', 
+                              help='Run as TCP server (can also set MCP_TRANSPORT_TYPE=tcp in .env)')
+    transport_type.add_argument('--websocket', action='store_true',
+                              help='Run as WebSocket server (can also set MCP_TRANSPORT_TYPE=websocket in .env)')
+    transport_group.add_argument('--host', help='Host to bind server (can also set MCP_TCP_HOST in .env)')
+    transport_group.add_argument('--port', type=int, help='Port for server (can also set MCP_TCP_PORT for TCP or MCP_WS_PORT for WebSocket)')
+    transport_group.add_argument('--ws-path', help='URL path for WebSocket server (default: /)')
+    
+    # AI service options
+    service_group = parser.add_argument_group('AI Service Options')
+    service_group.add_argument('--service-type', choices=['claude', 'openai', 'mock'], 
+                            help='AI service to use (can also set AI_SERVICE_TYPE in .env)')
+    service_group.add_argument('--claude-api-key', help='Anthropic API key (can also set ANTHROPIC_API_KEY in .env)')
+    service_group.add_argument('--openai-api-key', help='OpenAI API key (can also set OPENAI_API_KEY in .env)')
+    service_group.add_argument('--mock', action='store_true', help='Use mock AI service (for testing)')
+    
+    # Other options
+    parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                       help='Logging level')
+    parser.add_argument('--env-file', help='Path to .env file (default: .env in project root)')
+    args = parser.parse_args()
+    
+    # Load custom .env file if specified
+    if args.env_file:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(dotenv_path=args.env_file)
+            logging.info(f"Loaded environment variables from {args.env_file}")
+        except ImportError:
+            logging.error("--env-file specified but python-dotenv not installed. Please install with: pip install python-dotenv")
+            sys.exit(1)
+    
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        stream=sys.stderr
+    )
+    
+    # Create configuration from environment and command line args
+    config = MCPServerConfig.from_args(vars(args))
+    
+    # Create the AI service registry
+    ai_services = create_ai_services_from_config(config)
+    
+    # Log the available services
+    available_services = ai_services.list_services()
+    if available_services:
+        logging.info(f"Available AI services: {', '.join(available_services.keys())}")
+        logging.info(f"Default AI service: {ai_services.default_service}")
+    else:
+        logging.warning("No AI services configured. AI functionality will be unavailable.")
+    
+    # Create server with service registry
+    server = AIMCPServerApp(config, ai_services)
+    
+    # Determine transport type from args and config
+    transport_type = 'stdio'  # default
+    if args.tcp:
+        transport_type = 'tcp'
+    elif args.websocket:
+        transport_type = 'websocket'
+    elif config.transport_type in ['tcp', 'websocket']:
+        transport_type = config.transport_type
+
+    # Set host and port
+    host = args.host or config.tcp_host
+    
+    # Create and start appropriate transport
+    if transport_type == 'tcp':
+        port = args.port or config.tcp_port
+        logging.info(f"Starting TCP transport on {host}:{port}")
+        transport = TCPTransport(server, host, port)
+        await transport.start()
+    elif transport_type == 'websocket':
+        port = args.port or getattr(config, 'ws_port', 8765)  # Default WebSocket port
+        ws_path = args.ws_path or getattr(config, 'ws_path', '/')
+        logging.info(f"Starting WebSocket transport on {host}:{port}{ws_path}")
+        transport = WebSocketTransport(server, host, port, path=ws_path)
+        await transport.start()
+    else:
+        logging.info("Starting stdio transport")
+        transport = StdioTransport(server)
+        await transport.start()
+
+
+if __name__ == "__main__":
+    try:
+        # Display info about configuration
+        env_file = Path(__file__).resolve().parent / '.env'
+        if env_file.exists():
+            print(f"Using configuration from .env file: {env_file}", file=sys.stderr)
+        else:
+            print("No .env file found. Using environment variables or defaults.", file=sys.stderr)
+            
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("Server stopped by user")
+    except Exception as e:
+        logging.error(f"Unhandled exception: {e}", exc_info=True)
+        sys.exit(1)
