@@ -22,7 +22,6 @@ basic-mcp-server/
 ├── .env                      # Environment configuration
 ├── .gitignore                # Git ignore rules
 ├── README.md                 # Project documentation
-├── example_client.py         # Command-line client example
 ├── examples/                 # Example clients
 │   ├── example_client.py     # Command-line client example
 │   └── websocket_client.html # Browser WebSocket client
@@ -153,26 +152,26 @@ AI Service Options:
 
 ### Command Line Client
 
-The `example_client.py` provides a simple way to interact with the server:
+The `examples/example_client.py` provides a simple way to interact with the server:
 
 ```bash
 # Initialize connection
-python example_client.py initialize
+python examples/example_client.py initialize
 
 # List available tools
-python example_client.py list-tools
+python examples/example_client.py list-tools
 
 # Echo text
-python example_client.py echo "Hello, world!"
+python examples/example_client.py echo "Hello, world!"
 
 # Calculate expression
-python example_client.py calculate "2 + 3 * 4"
+python examples/example_client.py calculate "2 + 3 * 4"
 
 # Ask AI with dynamic service selection
-python example_client.py ask "What is the capital of France?" --service claude
+python examples/example_client.py ask "What is the capital of France?" --service claude
 
 # System information
-python example_client.py system-info
+python examples/example_client.py system-info
 ```
 
 ### WebSocket Browser Client
