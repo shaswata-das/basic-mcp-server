@@ -1,4 +1,33 @@
 #!/usr/bin/env python3
+┌─────────────────────────────────────┐
+│           Client Interfaces         │
+│  Web UI | API Access | CLI Client   │
+└───────────────┬─────────────────────┘
+                │
+┌───────────────▼─────────────────────┐
+│         MCP Server Layer            │
+│  Multiple Transports | JSON-RPC     │
+└───────────────┬─────────────────────┘
+                │
+┌───────────────▼─────────────────────┐
+│      Knowledge Extraction Core      │
+│                                     │
+│  ┌─────────────┐   ┌──────────────┐ │
+│  │ Repository  │   │ Codebase     │ │
+│  │ Analyzer    │   │ Scanner      │ │
+│  └─────────────┘   └──────────────┘ │
+│                                     │
+│  ┌─────────────┐   ┌──────────────┐ │
+│  │ Knowledge   │   │ Markdown     │ │
+│  │ Extractor   │   │ Generator    │ │
+│  └─────────────┘   └──────────────┘ │
+└───────────────┬─────────────────────┘
+                │
+┌───────────────▼─────────────────────┐
+│         AI Service Layer            │
+│  Claude | OpenAI | Other Models     │
+└─────────────────────────────────────┘
+
 """
 MCP Server with Claude API Integration
 
@@ -32,6 +61,15 @@ from mcp_server.handlers.system_handlers import (
     SystemInfoHandler,
     SystemHealthHandler
 )
+from mcp_server.handlers.knowledge_handlers import (
+    RepositoryAnalysisHandler,
+    KnowledgeExtractionHandler
+)
+from mcp_server.services.scanners.csharp_scanner import CSharpScannerService
+from mcp_server.services.scanners.angular_scanner import AngularScannerService
+from mcp_server.services.vector_store.qdrant_service import QdrantVectorService
+from mcp_server.services.mongodb_service import MongoDBService
+from mcp_server.services.embedding_service import EmbeddingService
 
 
 class AIMCPServerApp(MCPServer):
@@ -54,6 +92,7 @@ class AIMCPServerApp(MCPServer):
         self._setup_default_tools()
         self._setup_ai_tools()  # Unified AI tools
         self._setup_system_tools()  # Add system tools
+        self._setup_knowledge_tools()  # Add knowledge extraction tools
         self._setup_default_resources()
         
         # Register method handlers
@@ -72,10 +111,48 @@ class AIMCPServerApp(MCPServer):
         self.register_method_handler("resources/read", 
             ResourcesReadHandler(self.name, self.version, self.tools, self.resources))
         
+        # Create required services for knowledge extraction
+        csharp_scanner = CSharpScannerService()
+        angular_scanner = AngularScannerService()
+        
+        # Get API keys from config
+        openai_api_key = self.config.openai_api_key
+        anthropic_api_key = self.config.anthropic_api_key
+        
+        # Create embedding service - prefer OpenAI for embeddings if available
+        embedding_service = EmbeddingService(
+            openai_api_key=openai_api_key,
+            anthropic_api_key=anthropic_api_key,
+            model="text-embedding-3-small" if openai_api_key else "claude-3-haiku-20240307"
+        )
+        
+        # Create vector store service (in-memory for now)
+        vector_service = QdrantVectorService()
+        
+        # Create MongoDB service
+        mongodb_service = MongoDBService(
+            uri="mongodb://localhost:27017",
+            db_name="mcp-server"
+        )
+        
         # Register system handlers
         self.register_method_handler("system/info", SystemInfoHandler())
         self.register_method_handler("system/health", SystemHealthHandler(
             service_dependencies=["claude_api"] if self.ai_service else []
+        ))
+        
+        # Register knowledge handlers
+        self.register_method_handler("repository/analyze", RepositoryAnalysisHandler(
+            csharp_scanner=csharp_scanner,
+            angular_scanner=angular_scanner,
+            mongodb_service=mongodb_service
+        ))
+        
+        self.register_method_handler("knowledge/extract", KnowledgeExtractionHandler(
+            mongodb_service=mongodb_service,
+            embedding_service=embedding_service,
+            vector_service=vector_service,
+            ai_service=self.ai_services.get_service()
         ))
     
     def _setup_default_tools(self):
@@ -217,6 +294,61 @@ class AIMCPServerApp(MCPServer):
             "inputSchema": {
                 "type": "object",
                 "properties": {}  # No parameters needed
+            }
+        })
+    
+    def _setup_knowledge_tools(self):
+        """Setup knowledge extraction tools"""
+        self.register_tool("repository/analyze", {
+            "name": "repository/analyze",
+            "description": "Analyze a repository to extract structure and key components",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_path": {
+                        "type": "string",
+                        "description": "Path to the repository"
+                    },
+                    "repo_name": {
+                        "type": "string",
+                        "description": "Name of the repository (defaults to directory name)"
+                    },
+                    "exclude_patterns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Patterns to ignore (glob format)"
+                    },
+                    "framework_hint": {
+                        "type": "string",
+                        "description": "Framework hint ('csharp', 'angular', 'both', or 'auto')",
+                        "enum": ["csharp", "angular", "both", "auto"]
+                    }
+                },
+                "required": ["repo_path"]
+            }
+        })
+        
+        self.register_tool("knowledge/extract", {
+            "name": "knowledge/extract",
+            "description": "Extract knowledge from a repository and generate documentation",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_id": {
+                        "type": "string",
+                        "description": "Repository ID from repository/analyze"
+                    },
+                    "output_dir": {
+                        "type": "string",
+                        "description": "Directory to store generated documentation"
+                    },
+                    "framework_focus": {
+                        "type": "string",
+                        "description": "Framework to focus on ('csharp', 'angular', 'both', or 'auto')",
+                        "enum": ["csharp", "angular", "both", "auto"]
+                    }
+                },
+                "required": ["repo_id", "output_dir"]
             }
         })
     

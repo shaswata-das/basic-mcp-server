@@ -272,7 +272,7 @@ class KnowledgeExtractionHandler(HandlerInterface):
         mongodb_service: MongoDBService,
         embedding_service: EmbeddingService,
         vector_service: QdrantVectorService,
-        ai_service: Any  # Using Any to avoid circular import
+        ai_service
     ):
         """Initialize with required services
         
