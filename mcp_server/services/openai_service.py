@@ -53,11 +53,16 @@ class OpenAIService(AIServiceInterface):
             self.logger.error(f"No choices in response: {response}")
             return "Error: No response generated from OpenAI API"
     
-    async def generate_stream(self, prompt: str, model: Optional[str] = None, 
-                            max_tokens: Optional[int] = None, 
+    async def generate_stream(self, prompt: str, model: Optional[str] = None,
+                            max_tokens: Optional[int] = None,
                             temperature: Optional[float] = None,
-                            system: Optional[str] = None) -> aiohttp.ClientResponse:
-        """Generate a streaming response from OpenAI API"""
+                            system: Optional[str] = None) -> tuple[aiohttp.ClientSession, aiohttp.ClientResponse]:
+        """Generate a streaming response from OpenAI API
+
+        Returns a tuple of ``(session, response)`` with the underlying
+        ``aiohttp.ClientSession`` and ``aiohttp.ClientResponse`` left open.
+        Callers are responsible for closing both when finished.
+        """
         if not self.api_key:
             raise ValueError("OpenAI API key not configured")
         
@@ -105,15 +110,23 @@ class OpenAIService(AIServiceInterface):
         
         self.logger.debug(f"Calling OpenAI API with model: {model}")
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post(self.api_url_chat, headers=headers, json=payload) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    error_msg = f"API error (status {response.status}): {error_text}"
-                    self.logger.error(error_msg)
-                    raise ValueError(error_msg)
-                
-                if stream:
-                    return response  # Return the response object for streaming
-                else:
-                    return await response.json()
+        session = aiohttp.ClientSession()
+        try:
+            response = await session.post(self.api_url_chat, headers=headers, json=payload)
+            if response.status != 200:
+                error_text = await response.text()
+                error_msg = f"API error (status {response.status}): {error_text}"
+                self.logger.error(error_msg)
+                await session.close()
+                raise ValueError(error_msg)
+
+            if stream:
+                # Leave session and response open so caller can read the stream
+                return session, response
+            else:
+                data = await response.json()
+                await session.close()
+                return data
+        except Exception:
+            await session.close()
+            raise
