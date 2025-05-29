@@ -12,6 +12,7 @@ import asyncio
 from typing import Dict, List, Set, Tuple, Any, Optional
 import uuid
 import glob
+import aiofiles
 
 class AngularScannerService:
     """Scanner for Angular codebases"""
@@ -221,8 +222,9 @@ class AngularScannerService:
         angular_json_path = os.path.join(repo_path, "angular.json")
         if os.path.exists(angular_json_path):
             try:
-                with open(angular_json_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                async with aiofiles.open(angular_json_path, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+                return json.loads(content)
             except Exception as e:
                 self.logger.error(f"Error parsing angular.json: {str(e)}")
         
@@ -230,8 +232,9 @@ class AngularScannerService:
         angular_cli_path = os.path.join(repo_path, ".angular-cli.json")
         if os.path.exists(angular_cli_path):
             try:
-                with open(angular_cli_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                async with aiofiles.open(angular_cli_path, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+                return json.loads(content)
             except Exception as e:
                 self.logger.error(f"Error parsing .angular-cli.json: {str(e)}")
         
@@ -261,8 +264,8 @@ class AngularScannerService:
         """
         try:
             # Read file content
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
+            async with aiofiles.open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = await f.read()
             
             # Extract basic information
             relative_path = os.path.basename(file_path)
@@ -518,8 +521,8 @@ class AngularScannerService:
         """
         try:
             # Read file content
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
+            async with aiofiles.open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = await f.read()
             
             # Extract basic information
             relative_path = os.path.basename(file_path)
