@@ -1,9 +1,13 @@
 # Code Structure
 
-This section documents the code structure, including key components, namespaces, and their relationships.
-
-## Key Components
-
-The codebase is organized into the following main components:
-
-No detailed structure information available.
+```
+basic-mcp-server/
+├── mcp_server.py      # Main entry point
+└── mcp_server/        # Core package
+    ├── config/        # Environment and settings
+    ├── core/          # Server implementation
+    ├── handlers/      # JSON-RPC method handlers
+    ├── models/        # Data models
+    ├── services/      # AI integrations and utilities
+    └── transports/    # Communication layers
+```
