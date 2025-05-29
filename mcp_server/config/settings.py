@@ -56,9 +56,20 @@ class MCPServerConfig:
     openai_default_max_tokens: int = 1024
     openai_default_temperature: float = 0.7
     
+    # Embedding settings
+    embedding_model: str = "text-embedding-3-small"
+    
+    # Azure OpenAI Embedding settings
+    embeddings_3_large_api_url: Optional[str] = None
+    embeddings_3_large_api_key: Optional[str] = None
+    
+    embeddings_3_small_api_url: Optional[str] = None
+    embeddings_3_small_api_key: Optional[str] = None
+    
     # Available models
     claude_models: list = None
     openai_models: list = None
+    embedding_models: list = None
     
     def __post_init__(self):
         # Set default models if not provided
@@ -75,6 +86,12 @@ class MCPServerConfig:
                 "gpt-4-turbo",
                 "gpt-4",
                 "gpt-3.5-turbo"
+            ]
+            
+        if self.embedding_models is None:
+            self.embedding_models = [
+                "text-embedding-3-small",
+                "text-embedding-3-large"
             ]
             
         # Set default transport types if not provided
@@ -162,6 +179,17 @@ class MCPServerConfig:
                 config.openai_default_temperature = float(os.environ.get("OPENAI_DEFAULT_TEMPERATURE"))
             except ValueError:
                 pass
+        
+        # Embedding settings
+        if os.environ.get("EMBEDDING_MODEL"):
+            config.embedding_model = os.environ.get("EMBEDDING_MODEL")
+            
+        # Azure OpenAI Embedding settings
+        config.embeddings_3_large_api_url = os.environ.get("EMBEDDINGS_3_LARGE_API_URL")
+        config.embeddings_3_large_api_key = os.environ.get("EMBEDDINGS_3_LARGE_API_KEY")
+        
+        config.embeddings_3_small_api_url = os.environ.get("EMBEDDINGS_3_SMALL_API_URL")
+        config.embeddings_3_small_api_key = os.environ.get("EMBEDDINGS_3_SMALL_API_KEY")
         
         return config
     

@@ -7,6 +7,7 @@ This module provides embedding generation for code using various AI models.
 import logging
 import asyncio
 import time
+import os
 from typing import List, Dict, Any, Optional, Union
 
 import aiohttp
@@ -22,7 +23,9 @@ class EmbeddingService:
         model: str = "text-embedding-3-small",
         batch_size: int = 10,
         max_retries: int = 3,
-        retry_delay: float = 1.0
+        retry_delay: float = 1.0,
+        azure_api_url: Optional[str] = None,
+        azure_api_key: Optional[str] = None
     ):
         """Initialize the embedding service
         
@@ -33,6 +36,8 @@ class EmbeddingService:
             batch_size: Maximum batch size for embedding requests
             max_retries: Maximum number of retries for failed requests
             retry_delay: Delay between retries in seconds
+            azure_api_url: Azure OpenAI API URL
+            azure_api_key: Azure OpenAI API key
         """
         self.logger = logging.getLogger("mcp_server.services.embedding")
         self.openai_api_key = openai_api_key
@@ -41,9 +46,23 @@ class EmbeddingService:
         self.batch_size = batch_size
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.azure_api_url = azure_api_url
+        self.azure_api_key = azure_api_key
         
-        # Set provider based on model name
-        if model.startswith("text-embedding"):
+        # Set provider based on model name and configuration
+        if model == "text-embedding-3-large" and self.azure_api_url:
+            self.provider = "azure"
+            # Load from environment if not provided
+            if not self.azure_api_url:
+                self.azure_api_url = os.environ.get("EMBEDDINGS_3_LARGE_API_URL")
+                self.azure_api_key = os.environ.get("EMBEDDINGS_3_LARGE_API_KEY")
+        elif model == "text-embedding-3-small" and self.azure_api_url:
+            self.provider = "azure"
+            # Load from environment if not provided
+            if not self.azure_api_url:
+                self.azure_api_url = os.environ.get("EMBEDDINGS_3_SMALL_API_URL")
+                self.azure_api_key = os.environ.get("EMBEDDINGS_3_SMALL_API_KEY")
+        elif model.startswith("text-embedding"):
             self.provider = "openai"
         elif model.startswith("claude"):
             self.provider = "anthropic"
@@ -102,6 +121,8 @@ class EmbeddingService:
                     return await self._get_openai_embeddings(texts)
                 elif self.provider == "anthropic":
                     return await self._get_anthropic_embeddings(texts)
+                elif self.provider == "azure":
+                    return await self._get_azure_embeddings(texts)
                 else:
                     raise ValueError(f"Unknown provider: {self.provider}")
             
@@ -201,6 +222,52 @@ class EmbeddingService:
                     embeddings.append(embedding)
         
         return embeddings
+    
+    async def _get_azure_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Get embeddings from Azure OpenAI API
+        
+        Args:
+            texts: List of texts to embed
+            
+        Returns:
+            List of embedding vectors
+        """
+        if not self.azure_api_key or not self.azure_api_url:
+            raise ValueError("Azure OpenAI API key or URL not configured")
+        
+        # Prepare API request
+        headers = {
+            "Content-Type": "application/json",
+            "api-key": self.azure_api_key
+        }
+        
+        data = {
+            "input": texts,
+            "encoding_format": "float"
+        }
+        
+        # Determine API version and endpoint
+        api_version = "2023-05-15"
+        deployment_name = self.model.replace("-", "")  # Azure needs deployment name without hyphens
+        
+        # Make API request
+        async with aiohttp.ClientSession() as session:
+            endpoint = f"{self.azure_api_url}/openai/deployments/{deployment_name}/embeddings?api-version={api_version}"
+            
+            async with session.post(
+                endpoint,
+                headers=headers,
+                json=data
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise ValueError(f"Azure OpenAI API error ({response.status}): {error_text}")
+                
+                result = await response.json()
+                
+                # Extract embeddings
+                embeddings = [item["embedding"] for item in result["data"]]
+                return embeddings
     
     def create_mock_embedding(self, text: str, dimension: int = 1536) -> List[float]:
         """Create a mock embedding for testing

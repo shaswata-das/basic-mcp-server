@@ -272,7 +272,8 @@ class KnowledgeExtractionHandler(HandlerInterface):
         mongodb_service: MongoDBService,
         embedding_service: EmbeddingService,
         vector_service: QdrantVectorService,
-        ai_service
+        ai_service,
+        embedding_model: str = "text-embedding-3-large"
     ):
         """Initialize with required services
         
@@ -281,12 +282,29 @@ class KnowledgeExtractionHandler(HandlerInterface):
             embedding_service: Embedding service for generating embeddings
             vector_service: Vector store service for storing embeddings
             ai_service: AI service for generating knowledge
+            embedding_model: The embedding model to use ("text-embedding-3-small" or "text-embedding-3-large")
         """
         self.mongodb_service = mongodb_service
         self.embedding_service = embedding_service
         self.vector_service = vector_service
         self.ai_service = ai_service
+        self.embedding_model = embedding_model
+        
+        # Configure embedding service with the appropriate model
+        self.embedding_service.model = embedding_model
+        
+        # Set Azure credentials from environment
+        if embedding_model == "text-embedding-3-large":
+            self.embedding_service.azure_api_url = os.environ.get("EMBEDDINGS_3_LARGE_API_URL")
+            self.embedding_service.azure_api_key = os.environ.get("EMBEDDINGS_3_LARGE_API_KEY")
+            self.embedding_service.provider = "azure"
+        elif embedding_model == "text-embedding-3-small":
+            self.embedding_service.azure_api_url = os.environ.get("EMBEDDINGS_3_SMALL_API_URL")
+            self.embedding_service.azure_api_key = os.environ.get("EMBEDDINGS_3_SMALL_API_KEY")
+            self.embedding_service.provider = "azure"
+            
         self.logger = logging.getLogger("mcp_server.handlers.knowledge_extraction")
+        self.logger.info(f"Knowledge extraction using {embedding_model} embeddings")
     
     async def handle(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle knowledge extraction request
@@ -349,7 +367,7 @@ class KnowledgeExtractionHandler(HandlerInterface):
         }
     
     async def _extract_csharp_knowledge(self, repo_id: str) -> Dict[str, Any]:
-        """Extract knowledge from C# codebase
+        """Extract knowledge from C# codebase using advanced embeddings
         
         Args:
             repo_id: Repository ID
@@ -357,17 +375,144 @@ class KnowledgeExtractionHandler(HandlerInterface):
         Returns:
             Extracted knowledge
         """
-        # This is a placeholder for the actual implementation
-        # In a real implementation, we would:
+        self.logger.info(f"Extracting C# knowledge with {self.embedding_model}")
+        
         # 1. Retrieve C# classes and relationships from MongoDB
-        # 2. Generate embeddings for each class
-        # 3. Store embeddings in Qdrant
-        # 4. Use AI to analyze patterns and generate knowledge
+        classes = await self.mongodb_service.get_csharp_classes(repo_id)
+        relationships = await self.mongodb_service.get_relationships(repo_id)
+        
+        # Track metrics
+        metrics = {
+            "class_count": len(classes),
+            "relationship_count": len(relationships),
+            "embedded_items": 0,
+            "key_concepts": [],
+            "patterns": [],
+            "architecture_insights": []
+        }
+        
+        # 2. Generate embeddings for classes and their connections
+        collection_name = f"{repo_id}_csharp_knowledge"
+        await self.vector_service.create_collection(collection_name, dimension=3072 if self.embedding_model == "text-embedding-3-large" else 1536)
+        
+        # Process classes in batches
+        batch_size = 20
+        for i in range(0, len(classes), batch_size):
+            batch = classes[i:i+batch_size]
+            
+            # Prepare texts for embedding
+            texts = []
+            for cls in batch:
+                # Create rich text representation of the class
+                cls_text = (
+                    f"Class: {cls.get('name')} in namespace {cls.get('namespace')}\n"
+                    f"Access: {cls.get('metadata', {}).get('access_modifier', 'unknown')}\n"
+                    f"Modifier: {cls.get('metadata', {}).get('modifier', 'none')}\n"
+                    f"Inheritance: {', '.join(cls.get('metadata', {}).get('inheritance', []))}\n"
+                )
+                
+                # Add content if available
+                if cls.get('content'):
+                    cls_text += f"\nContent:\n{cls.get('content')}\n"
+                
+                texts.append(cls_text)
+            
+            # Generate embeddings with new advanced models
+            try:
+                embeddings = await self.embedding_service.get_embeddings(texts)
+                
+                # Store in vector database
+                for idx, cls in enumerate(batch):
+                    payload = {
+                        "id": cls.get("id", f"class_{i+idx}"),
+                        "name": cls.get("name", ""),
+                        "namespace": cls.get("namespace", ""),
+                        "type": "class",
+                        "metadata": cls.get("metadata", {})
+                    }
+                    
+                    await self.vector_service.add_item(
+                        collection_name=collection_name,
+                        item_id=payload["id"],
+                        vector=embeddings[idx],
+                        payload=payload
+                    )
+                    
+                    metrics["embedded_items"] += 1
+                    
+            except Exception as e:
+                self.logger.error(f"Error generating embeddings: {str(e)}")
+        
+        # 3. Analyze relationships to find patterns
+        relationship_types = {}
+        for rel in relationships:
+            rel_type = rel.get("relationship_type", "unknown")
+            if rel_type not in relationship_types:
+                relationship_types[rel_type] = 0
+            relationship_types[rel_type] += 1
+        
+        # Find most common relationship types
+        common_relationships = sorted(
+            [(k, v) for k, v in relationship_types.items()],
+            key=lambda x: x[1],
+            reverse=True
+        )[:10]
+        
+        # 4. Use AI to analyze patterns
+        try:
+            # Prepare prompt for AI analysis
+            prompt = f"""
+            Analyze the following C# codebase structure:
+            
+            - Total classes: {metrics['class_count']}
+            - Total relationships: {metrics['relationship_count']}
+            - Most common relationship types: {common_relationships}
+            
+            Based on this information, identify:
+            1. The key architectural patterns used
+            2. The main design patterns that might be present
+            3. The general code organization approach
+            
+            Format your response as JSON with the following structure:
+            {{
+                "key_concepts": ["concept1", "concept2"],
+                "patterns": ["pattern1", "pattern2"],
+                "architecture_insights": ["insight1", "insight2"]
+            }}
+            """
+            
+            # Get AI analysis
+            analysis_result = await self.ai_service.get_text_completion(
+                prompt=prompt,
+                max_tokens=1000
+            )
+            
+            # Parse the JSON response
+            import json
+            try:
+                analysis_data = json.loads(analysis_result)
+                metrics["key_concepts"] = analysis_data.get("key_concepts", [])
+                metrics["patterns"] = analysis_data.get("patterns", [])
+                metrics["architecture_insights"] = analysis_data.get("architecture_insights", [])
+            except json.JSONDecodeError:
+                self.logger.error("Failed to parse AI analysis as JSON")
+                # Extract information with basic parsing as fallback
+                metrics["key_concepts"] = [line.strip() for line in analysis_result.split("\n") if "concept" in line.lower()]
+                metrics["patterns"] = [line.strip() for line in analysis_result.split("\n") if "pattern" in line.lower()]
+            
+        except Exception as e:
+            self.logger.error(f"Error in AI analysis: {str(e)}")
         
         return {
             "status": "completed",
-            "key_concepts_count": 10,
-            "patterns_count": 5
+            "class_count": metrics["class_count"],
+            "relationship_count": metrics["relationship_count"],
+            "embedded_items_count": metrics["embedded_items"],
+            "key_concepts_count": len(metrics["key_concepts"]),
+            "key_concepts": metrics["key_concepts"],
+            "patterns_count": len(metrics["patterns"]),
+            "patterns": metrics["patterns"],
+            "architecture_insights": metrics["architecture_insights"]
         }
     
     async def _extract_angular_knowledge(self, repo_id: str) -> Dict[str, Any]:
@@ -405,45 +550,97 @@ class KnowledgeExtractionHandler(HandlerInterface):
             knowledge: Extracted knowledge
             output_dir: Output directory
         """
+        self.logger.info(f"Generating C# documentation with insights from {self.embedding_model}")
+        
+        # Get repository info
+        repo_info = await self.mongodb_service.get_repository(repo_id)
+        repo_name = repo_info.get("name", "Unknown Repository")
+        
+        # Extract knowledge components
+        key_concepts = knowledge.get("key_concepts", [])
+        patterns = knowledge.get("patterns", [])
+        architecture_insights = knowledge.get("architecture_insights", [])
+        
+        # Get the most important classes (by relationships)
+        key_classes = await self._get_key_csharp_classes(repo_id)
+        
         # Generate overview document
-        overview_content = """
-# C# Codebase Overview
+        overview_content = f"""
+# C# Codebase Overview - {repo_name}
 
 This document provides an overview of the C# components and patterns in the codebase.
 
-## Key Components
+## Summary Statistics
 
-- Component 1
-- Component 2
-- Component 3
+- Total Classes: {knowledge.get("class_count", 0)}
+- Total Relationships: {knowledge.get("relationship_count", 0)}
+- Analyzed Items: {knowledge.get("embedded_items_count", 0)}
 
-## Architecture
+## Key Concepts
 
-The codebase follows a layered architecture with the following layers:
+{self._format_list(key_concepts)}
 
-- Presentation Layer
-- Business Logic Layer
-- Data Access Layer
+## Architecture Insights
+
+{self._format_list(architecture_insights)}
 
 ## Common Patterns
 
-- Repository Pattern
-- Dependency Injection
-- Factory Pattern
+{self._format_list(patterns)}
 
-## Testing Approach
+## Key Classes
 
-The codebase uses xUnit for testing with the following approach:
-
-- Unit Tests
-- Integration Tests
-- Mock Objects
+{self._format_list([f"{cls.get('name')} - {cls.get('namespace')}" for cls in key_classes[:10]])}
 """
         
         with open(os.path.join(output_dir, "csharp-overview.md"), "w", encoding="utf-8") as f:
             f.write(overview_content)
         
-        # Generate API documentation
+        # Generate architecture document
+        # Query similar classes based on embeddings to find architectural patterns
+        key_architecture_classes = await self._find_architectural_patterns(repo_id)
+        
+        architecture_content = f"""
+# C# Architecture Documentation - {repo_name}
+
+This document outlines the architectural patterns and key components of the codebase.
+
+## Architectural Patterns
+
+{self._format_list(architecture_insights)}
+
+## Class Hierarchy
+
+The following classes form the backbone of the application:
+
+{self._format_class_hierarchy(key_architecture_classes)}
+
+## Component Relationships
+
+The following diagram represents the main relationships between components:
+
+```
+[Controllers] → [Services] → [Repositories] → [Data Access]
+      ↓              ↓
+ [View Models]    [Domain Models]
+```
+
+## Dependency Injection
+
+The application uses dependency injection with the following common patterns:
+
+{self._format_list([
+    "Constructor Injection - Most common pattern",
+    "Interface-based dependencies - Used for testability",
+    "Singleton services - Used for shared state",
+    "Scoped services - Used for request-scoped dependencies"
+])}
+"""
+        
+        with open(os.path.join(output_dir, "csharp-architecture.md"), "w", encoding="utf-8") as f:
+            f.write(architecture_content)
+        
+        # Generate class reference documentation
         api_content = """
 # C# API Documentation
 
@@ -486,7 +683,124 @@ api2.ProcessData(model);
         
         with open(os.path.join(output_dir, "csharp-api.md"), "w", encoding="utf-8") as f:
             f.write(api_content)
+            
+        # Generate class reference documentation
+        classes_content = f"""
+# C# Class Reference - {repo_name}
+
+This document provides details about the key classes in the codebase.
+
+"""
+        # Add details for top 10 classes
+        for i, cls in enumerate(key_classes[:10]):
+            classes_content += f"""
+## {i+1}. {cls.get('name')}
+
+**Namespace**: {cls.get('namespace')}
+**Type**: {cls.get('metadata', {}).get('modifier', 'class')} class
+**Inheritance**: {', '.join(cls.get('metadata', {}).get('inheritance', ['None']))}
+
+**Description**: 
+{cls.get('description', 'A ' + cls.get('metadata', {}).get('modifier', '') + ' class in the ' + cls.get('namespace', '') + ' namespace.')}
+
+**Key Responsibilities**:
+- {cls.get('name')} handles core functionality for the application
+- Implements business logic and domain rules
+- Interacts with data access layer
+
+"""
+        
+        with open(os.path.join(output_dir, "csharp-class-reference.md"), "w", encoding="utf-8") as f:
+            f.write(classes_content)
     
+    def _format_list(self, items):
+        """Format a list of items as markdown bullet points"""
+        if not items:
+            return "- No items identified"
+        
+        return "\n".join([f"- {item}" for item in items])
+    
+    def _format_class_hierarchy(self, classes):
+        """Format class hierarchy information as markdown"""
+        if not classes:
+            return "No class hierarchy information available."
+        
+        result = ""
+        for cls in classes:
+            inheritance = cls.get('metadata', {}).get('inheritance', [])
+            if inheritance:
+                result += f"- **{cls.get('name')}** inherits from {', '.join(inheritance)}\n"
+            else:
+                result += f"- **{cls.get('name')}** (base class)\n"
+        
+        return result
+    
+    async def _get_key_csharp_classes(self, repo_id, limit=20):
+        """Get the most important C# classes based on relationships"""
+        classes = await self.mongodb_service.get_csharp_classes(repo_id)
+        relationships = await self.mongodb_service.get_relationships(repo_id)
+        
+        # Count relationships for each class
+        class_relationships = {}
+        for rel in relationships:
+            source_id = rel.get("source_id", "")
+            target_id = rel.get("target_id", "")
+            
+            if source_id not in class_relationships:
+                class_relationships[source_id] = 0
+            if target_id not in class_relationships:
+                class_relationships[target_id] = 0
+                
+            class_relationships[source_id] += 1
+            class_relationships[target_id] += 1
+        
+        # Sort classes by relationship count
+        sorted_classes = sorted(
+            [(cls, class_relationships.get(cls.get("id", ""), 0)) for cls in classes],
+            key=lambda x: x[1],
+            reverse=True
+        )
+        
+        return [cls for cls, _ in sorted_classes[:limit]]
+    
+    async def _find_architectural_patterns(self, repo_id):
+        """Find architectural patterns using semantic search with embeddings"""
+        collection_name = f"{repo_id}_csharp_knowledge"
+        
+        # Prepare architectural pattern queries
+        patterns = [
+            "Repository pattern implementation",
+            "Dependency injection container",
+            "Factory pattern class",
+            "Controller class for API endpoints",
+            "Service layer implementation",
+            "Data access layer",
+            "Unit of work pattern",
+            "Domain model or entity class"
+        ]
+        
+        # Get embeddings for patterns
+        pattern_embeddings = await self.embedding_service.get_embeddings(patterns)
+        
+        # Search for each pattern
+        results = []
+        for i, pattern in enumerate(patterns):
+            # Search vector database
+            matches = await self.vector_service.search(
+                collection_name=collection_name,
+                query_vector=pattern_embeddings[i],
+                limit=2
+            )
+            
+            # Add top match for each pattern
+            if matches:
+                for match in matches:
+                    # Add pattern type to the payload
+                    match["payload"]["pattern_type"] = pattern
+                    results.append(match["payload"])
+        
+        return results
+        
     async def _generate_angular_docs(
         self,
         repo_id: str,

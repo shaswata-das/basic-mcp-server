@@ -1,32 +1,4 @@
 #!/usr/bin/env python3
-┌─────────────────────────────────────┐
-│           Client Interfaces         │
-│  Web UI | API Access | CLI Client   │
-└───────────────┬─────────────────────┘
-                │
-┌───────────────▼─────────────────────┐
-│         MCP Server Layer            │
-│  Multiple Transports | JSON-RPC     │
-└───────────────┬─────────────────────┘
-                │
-┌───────────────▼─────────────────────┐
-│      Knowledge Extraction Core      │
-│                                     │
-│  ┌─────────────┐   ┌──────────────┐ │
-│  │ Repository  │   │ Codebase     │ │
-│  │ Analyzer    │   │ Scanner      │ │
-│  └─────────────┘   └──────────────┘ │
-│                                     │
-│  ┌─────────────┐   ┌──────────────┐ │
-│  │ Knowledge   │   │ Markdown     │ │
-│  │ Extractor   │   │ Generator    │ │
-│  └─────────────┘   └──────────────┘ │
-└───────────────┬─────────────────────┘
-                │
-┌───────────────▼─────────────────────┐
-│         AI Service Layer            │
-│  Claude | OpenAI | Other Models     │
-└─────────────────────────────────────┘
 
 """
 MCP Server with Claude API Integration
@@ -65,6 +37,16 @@ from mcp_server.handlers.knowledge_handlers import (
     RepositoryAnalysisHandler,
     KnowledgeExtractionHandler
 )
+from mcp_server.handlers.enhanced_knowledge_handlers import (
+    EnhancedRepositoryAnalysisHandler,
+    EnhancedCodeSearchHandler,
+    DependencyAnalysisHandler
+)
+from mcp_server.handlers.ai_development_handlers import (
+    CodebaseAnalysisHandler,
+    CodeSearchHandler,
+    KnowledgeGraphQueryHandler
+)
 from mcp_server.services.scanners.csharp_scanner import CSharpScannerService
 from mcp_server.services.scanners.angular_scanner import AngularScannerService
 from mcp_server.services.vector_store.qdrant_service import QdrantVectorService
@@ -77,8 +59,9 @@ class AIMCPServerApp(MCPServer):
     
     def __init__(self, config: MCPServerConfig, ai_services: AIServiceRegistry):
         """Initialize with configuration and AI service registry"""
-        super().__init__(config, None)  # Don't pass ai_service to parent
-        self.ai_services = ai_services  # Store the registry instead
+        self.config = config
+        self.ai_services = ai_services  # Store the registry
+        super().__init__(config, None)  # Don't pass ai_service to parent, we use ai_services instead
     
     def initialize(self):
         """Initialize server components"""
@@ -148,11 +131,53 @@ class AIMCPServerApp(MCPServer):
             mongodb_service=mongodb_service
         ))
         
+        # Get AI service, handling the case where ai_services might not be available
+        ai_service = None
+        if hasattr(self, 'ai_services') and self.ai_services:
+            ai_service = self.ai_services.get_service()
+        
         self.register_method_handler("knowledge/extract", KnowledgeExtractionHandler(
             mongodb_service=mongodb_service,
             embedding_service=embedding_service,
             vector_service=vector_service,
-            ai_service=self.ai_services.get_service()
+            ai_service=ai_service
+        ))
+        
+        # Register enhanced knowledge handlers
+        self.register_method_handler("repository/enhanced_analyze", EnhancedRepositoryAnalysisHandler(
+            mongodb_service=mongodb_service,
+            embedding_service=embedding_service,
+            vector_service=vector_service,
+            ai_service=ai_service
+        ))
+        
+        self.register_method_handler("knowledge/search", EnhancedCodeSearchHandler(
+            mongodb_service=mongodb_service,
+            embedding_service=embedding_service,
+            vector_service=vector_service
+        ))
+        
+        self.register_method_handler("knowledge/dependencies", DependencyAnalysisHandler(
+            mongodb_service=mongodb_service
+        ))
+        
+        # Register AI development handlers
+        self.register_method_handler("codebase/analyze", CodebaseAnalysisHandler(
+            mongodb_service=mongodb_service,
+            embedding_service=embedding_service,
+            vector_service=vector_service,
+            ai_service=ai_service
+        ))
+        
+        self.register_method_handler("code/search", CodeSearchHandler(
+            mongodb_service=mongodb_service,
+            embedding_service=embedding_service,
+            vector_service=vector_service
+        ))
+        
+        self.register_method_handler("knowledge/query", KnowledgeGraphQueryHandler(
+            mongodb_service=mongodb_service,
+            ai_service=ai_service
         ))
     
     def _setup_default_tools(self):
@@ -190,12 +215,15 @@ class AIMCPServerApp(MCPServer):
     def _setup_ai_tools(self):
         """Setup AI tools with dynamic service selection"""
         # Get available services
-        available_services = list(self.ai_services.list_services().keys())
+        if hasattr(self, 'ai_services') and self.ai_services:
+            available_services = list(self.ai_services.list_services().keys())
+        else:
+            available_services = ["mock"]
         
         # Get default models for each service
         default_models = {
-            "claude": self.config.claude_default_model,
-            "openai": self.config.openai_default_model,
+            "claude": self.config.claude_default_model if hasattr(self.config, 'claude_default_model') else "claude-3-opus-20240229",
+            "openai": self.config.openai_default_model if hasattr(self.config, 'openai_default_model') else "gpt-4o",
             "mock": "mock-model"
         }
         
@@ -212,7 +240,7 @@ class AIMCPServerApp(MCPServer):
                     },
                     "service_name": {
                         "type": "string",
-                        "description": f"AI service to use (defaults to {self.ai_services.default_service or 'server configuration'})",
+                        "description": "AI service to use (defaults to server configuration)",
                         "enum": available_services
                     },
                     "model": {
@@ -273,9 +301,10 @@ class AIMCPServerApp(MCPServer):
             }
         })
         
-        # For backward compatibility, keep the service-specific tools
-        self._setup_claude_tools()
-        self._setup_openai_tools()
+        # For backward compatibility, we would setup service-specific tools,
+        # but they are now handled by the unified tools
+        # self._setup_claude_tools()
+        # self._setup_openai_tools()
     
     def _setup_system_tools(self):
         """Setup system-related tools"""
@@ -349,6 +378,198 @@ class AIMCPServerApp(MCPServer):
                     }
                 },
                 "required": ["repo_id", "output_dir"]
+            }
+        })
+        
+        # Enhanced knowledge tools
+        self.register_tool("repository/enhanced_analyze", {
+            "name": "repository/enhanced_analyze",
+            "description": "Perform deep code analysis with call graphs, patterns, and environment analysis",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_path": {
+                        "type": "string",
+                        "description": "Path to the repository"
+                    },
+                    "repo_name": {
+                        "type": "string",
+                        "description": "Name of the repository (defaults to directory name)"
+                    },
+                    "exclude_patterns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Patterns to ignore (glob format)"
+                    },
+                    "extract_patterns": {
+                        "type": "boolean",
+                        "description": "Whether to extract code patterns"
+                    },
+                    "extract_call_graphs": {
+                        "type": "boolean",
+                        "description": "Whether to extract function call graphs"
+                    },
+                    "extract_environment": {
+                        "type": "boolean",
+                        "description": "Whether to analyze environment and dependencies"
+                    },
+                    "output_dir": {
+                        "type": "string",
+                        "description": "Directory to store analysis output"
+                    }
+                },
+                "required": ["repo_path"]
+            }
+        })
+        
+        self.register_tool("knowledge/search", {
+            "name": "knowledge/search",
+            "description": "Search for code using semantic embeddings",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_id": {
+                        "type": "string",
+                        "description": "Repository ID from repository/analyze"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Natural language search query"
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "Optional language filter"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return"
+                    },
+                    "include_code": {
+                        "type": "boolean",
+                        "description": "Whether to include code snippets in results"
+                    }
+                },
+                "required": ["repo_id", "query"]
+            }
+        })
+        
+        self.register_tool("knowledge/dependencies", {
+            "name": "knowledge/dependencies",
+            "description": "Analyze dependencies between components",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_id": {
+                        "type": "string",
+                        "description": "Repository ID from repository/analyze"
+                    },
+                    "component_id": {
+                        "type": "string",
+                        "description": "Component ID to analyze dependencies for"
+                    },
+                    "component_type": {
+                        "type": "string",
+                        "description": "Component type to analyze dependencies for"
+                    },
+                    "include_transitive": {
+                        "type": "boolean",
+                        "description": "Whether to include transitive dependencies"
+                    }
+                },
+                "required": ["repo_id"]
+            }
+        })
+        
+        # AI Development Tools
+        self.register_tool("codebase/analyze", {
+            "name": "codebase/analyze",
+            "description": "Analyze a codebase and generate AI-friendly documentation and knowledge",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_path": {
+                        "type": "string",
+                        "description": "Path to the repository"
+                    },
+                    "repo_name": {
+                        "type": "string",
+                        "description": "Name of the repository (defaults to directory name)"
+                    },
+                    "exclude_patterns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Patterns to ignore (glob format)"
+                    },
+                    "file_limit": {
+                        "type": "integer",
+                        "description": "Maximum number of files to analyze"
+                    },
+                    "output_dir": {
+                        "type": "string",
+                        "description": "Directory to store analysis output"
+                    }
+                },
+                "required": ["repo_path"]
+            }
+        })
+        
+        self.register_tool("code/search", {
+            "name": "code/search",
+            "description": "Search code and documentation using natural language queries",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_id": {
+                        "type": "string",
+                        "description": "Repository ID from codebase/analyze"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Natural language query"
+                    },
+                    "search_type": {
+                        "type": "string",
+                        "description": "Type of search",
+                        "enum": ["all", "code", "documentation"]
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "Language to filter results by"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return"
+                    }
+                },
+                "required": ["repo_id", "query"]
+            }
+        })
+        
+        self.register_tool("knowledge/query", {
+            "name": "knowledge/query",
+            "description": "Query the knowledge graph for information about a codebase",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo_id": {
+                        "type": "string",
+                        "description": "Repository ID from codebase/analyze"
+                    },
+                    "query_type": {
+                        "type": "string",
+                        "description": "Type of query",
+                        "enum": ["general", "component", "pattern"]
+                    },
+                    "component_name": {
+                        "type": "string",
+                        "description": "Name of the component to query"
+                    },
+                    "pattern_name": {
+                        "type": "string",
+                        "description": "Name of the pattern to query"
+                    }
+                },
+                "required": ["repo_id"]
             }
         })
     

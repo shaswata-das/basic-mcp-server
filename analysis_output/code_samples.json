@@ -1,0 +1,337 @@
+[
+  {
+    "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\AssemblyInfo.cs",
+    "result": {
+      "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\AssemblyInfo.cs",
+      "language": "csharp",
+      "namespace": "Unknown",
+      "classes": [],
+      "interfaces": [],
+      "di_registrations": [],
+      "using_directives": [
+        "System.Reflection",
+        "System.Runtime.InteropServices"
+      ],
+      "content_length": 523,
+      "file_name": "AssemblyInfo.cs"
+    }
+  },
+  {
+    "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\Program.cs",
+    "result": {
+      "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\Program.cs",
+      "language": "csharp",
+      "namespace": "FxRateImporterTemp",
+      "classes": [
+        {
+          "name": "Program",
+          "inheritance": [],
+          "methods": [
+            {
+              "name": "Main",
+              "parameters": [
+                "string[] args"
+              ]
+            },
+            {
+              "name": "ConvertDailyFxRatesJObjectToExchangeRateDataModel",
+              "parameters": [
+                "dailyFxRatesJsonObject"
+              ]
+            },
+            {
+              "name": "HttpClient",
+              "parameters": []
+            },
+            {
+              "name": "AuthenticationHeaderValue",
+              "parameters": [
+                "\"Basic\"",
+                "base64String"
+              ]
+            },
+            {
+              "name": "ConvertDailyFxRatesJObjectToExchangeRateDataModel",
+              "parameters": [
+                "dailyFxRatesJsonObject"
+              ]
+            },
+            {
+              "name": "Exception",
+              "parameters": [
+                "\"Could not get fx rates from api\""
+              ]
+            },
+            {
+              "name": "Exception",
+              "parameters": [
+                "\"FxRateDownloadFailed\"",
+                "innerException"
+              ]
+            },
+            {
+              "name": "Exception",
+              "parameters": [
+                "\"FxRateDownloadFailed\"",
+                "ex"
+              ]
+            },
+            {
+              "name": "ConvertDailyFxRatesJObjectToExchangeRateDataModel",
+              "parameters": [
+                "JObject dailyFxRates"
+              ]
+            },
+            {
+              "name": "ExchangeRateDataModel",
+              "parameters": []
+            },
+            {
+              "name": "StringBuilder",
+              "parameters": []
+            },
+            {
+              "name": "GetExchangeRateModelFromLambda",
+              "parameters": [
+                "previousExchangeDate"
+              ]
+            },
+            {
+              "name": "GetExchangeRateModelFromLambda",
+              "parameters": [
+                "DateTime date"
+              ]
+            },
+            {
+              "name": "HttpClient",
+              "parameters": []
+            },
+            {
+              "name": "Uri",
+              "parameters": [
+                "url"
+              ]
+            },
+            {
+              "name": "StringContent",
+              "parameters": [
+                "query",
+                "Encoding.UTF8",
+                "\"application/json\""
+              ]
+            },
+            {
+              "name": "ConvertDailyFxRatesToExchangeRateDataModel",
+              "parameters": [
+                "DailyFxRatesObject dailyFxRates"
+              ]
+            },
+            {
+              "name": "ExchangeRateDataModel",
+              "parameters": []
+            },
+            {
+              "name": "GetExchangeRateDataModelId",
+              "parameters": [
+                "DateTime timestamp"
+              ]
+            },
+            {
+              "name": "SaveExchangeRateDataModel",
+              "parameters": [
+                "ExchangeRateDataModel model"
+              ]
+            },
+            {
+              "name": "TMEDBTestEntities",
+              "parameters": []
+            },
+            {
+              "name": "TMEDBTestEntities",
+              "parameters": []
+            },
+            {
+              "name": "CreateJsonFilePathFromExchangeDate",
+              "parameters": [
+                "DateTime exchangeDate",
+                "string rootFolderLocation"
+              ]
+            }
+          ],
+          "properties": [
+            {
+              "name": "Parse"
+            },
+            {
+              "name": "currency"
+            },
+            {
+              "name": "currency"
+            },
+            {
+              "name": "to"
+            },
+            {
+              "name": "currency"
+            },
+            {
+              "name": "date"
+            },
+            {
+              "name": "and"
+            },
+            {
+              "name": "HttpRequestMessage"
+            },
+            {
+              "name": "for"
+            },
+            {
+              "name": "tbl_exchange_rate"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "di_registrations": [],
+      "using_directives": [
+        "FxRateImporterTemp.Db",
+        "FxRateImporterTemp.Models",
+        "Newtonsoft.Json",
+        "Orbitax.Core.FileStorage",
+        "Orbitax.Core.IoC",
+        "System",
+        "System.Collections.Generic",
+        "System.Configuration",
+        "System.Data.Entity",
+        "System.Globalization",
+        "System.IO",
+        "System.Linq",
+        "System.Net.Http",
+        "System.Net.Http.Headers",
+        "System.Text",
+        "System.Threading.Tasks",
+        "Newtonsoft.Json.Linq"
+      ],
+      "content_length": 14126,
+      "file_name": "Program.cs"
+    }
+  },
+  {
+    "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\Db\\tbl_exchange_rate.cs",
+    "result": {
+      "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\Db\\tbl_exchange_rate.cs",
+      "language": "csharp",
+      "namespace": "FxRateImporterTemp.Db",
+      "classes": [
+        {
+          "name": "tbl_exchange_rate",
+          "inheritance": [],
+          "methods": [],
+          "properties": [
+            {
+              "name": "id"
+            },
+            {
+              "name": "exchange_date"
+            },
+            {
+              "name": "currency_code"
+            }
+          ]
+        },
+        {
+          "name": "tbl_exchange_rate_test",
+          "inheritance": [],
+          "methods": [],
+          "properties": [
+            {
+              "name": "id"
+            },
+            {
+              "name": "exchange_date"
+            },
+            {
+              "name": "currency_code"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "di_registrations": [],
+      "using_directives": [
+        "System"
+      ],
+      "content_length": 808,
+      "file_name": "tbl_exchange_rate.cs"
+    }
+  },
+  {
+    "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\Db\\TMEDBTestModel.Context.cs",
+    "result": {
+      "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\Db\\TMEDBTestModel.Context.cs",
+      "language": "csharp",
+      "namespace": "FxRateImporterTemp.Db",
+      "classes": [
+        {
+          "name": "TMEDBTestEntities",
+          "inheritance": [
+            "DbContext"
+          ],
+          "methods": [
+            {
+              "name": "TMEDBTestEntities",
+              "parameters": []
+            },
+            {
+              "name": "OnModelCreating",
+              "parameters": [
+                "DbModelBuilder modelBuilder"
+              ]
+            },
+            {
+              "name": "UnintentionalCodeFirstException",
+              "parameters": []
+            },
+            {
+              "name": "get_last_synchronized_exchange_date",
+              "parameters": []
+            }
+          ],
+          "properties": [
+            {
+              "name": "tbl_exchange_rate"
+            },
+            {
+              "name": "tbl_exchange_rate_test"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "di_registrations": [],
+      "using_directives": [
+        "System",
+        "System.Data.Entity",
+        "System.Data.Entity.Core.Objects",
+        "System.Data.Entity.Infrastructure"
+      ],
+      "content_length": 1317,
+      "file_name": "TMEDBTestModel.Context.cs"
+    }
+  },
+  {
+    "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\Db\\TMEDBTestModel.Designer.cs",
+    "result": {
+      "file_path": "C:/workstation/orbitax-platform-api-fork\\FxRateImporterTemp\\Db\\TMEDBTestModel.Designer.cs",
+      "language": "csharp",
+      "namespace": "Unknown",
+      "classes": [],
+      "interfaces": [],
+      "di_registrations": [],
+      "using_directives": [],
+      "content_length": 761,
+      "file_name": "TMEDBTestModel.Designer.cs"
+    }
+  }
+]

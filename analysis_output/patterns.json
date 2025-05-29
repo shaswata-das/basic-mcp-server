@@ -1,0 +1,31 @@
+{
+  "design_patterns": [],
+  "architectural_patterns": [],
+  "code_organization": [
+    {
+      "name": "Feature-based Organization",
+      "confidence": "high",
+      "sources": [
+        "folder_structure"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Layer-based Organization",
+      "confidence": "high",
+      "sources": [
+        "folder_structure"
+      ],
+      "count": 1
+    },
+    {
+      "name": "Component-based Organization",
+      "confidence": "high",
+      "sources": [
+        "folder_structure"
+      ],
+      "count": 1
+    }
+  ],
+  "language_specific": {}
+}
