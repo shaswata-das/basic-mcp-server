@@ -5,6 +5,8 @@ This module provides implementations of standard MCP method handlers.
 """
 
 import json
+import ast
+import operator as op
 from typing import Any, Dict, List, Optional
 
 from mcp_server.core.server import HandlerInterface
@@ -265,20 +267,54 @@ class ToolsCallHandler(HandlerInterface):
         """Handle calculate tool"""
         expression = arguments.get("expression", "")
         try:
-            # Simple safe evaluation for basic arithmetic
-            allowed_chars = set("0123456789+-*/.() ")
-            if all(c in allowed_chars for c in expression):
-                result = eval(expression)
-                return {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Result: {result}"
-                        }
-                    ]
+            # Evaluate the expression using a restricted AST walker to avoid
+            # the security risks of ``eval`` while still supporting basic
+            # arithmetic operations.
+
+            def safe_eval(expr: str) -> float:
+                allowed_operators = {
+                    ast.Add: op.add,
+                    ast.Sub: op.sub,
+                    ast.Mult: op.mul,
+                    ast.Div: op.truediv,
+                    ast.Pow: op.pow,
+                    ast.Mod: op.mod,
+                    ast.USub: op.neg,
                 }
-            else:
-                raise ValueError("Invalid characters in expression")
+
+                def _eval(node: ast.AST) -> float:
+                    if isinstance(node, ast.Expression):
+                        return _eval(node.body)
+                    if isinstance(node, ast.Constant):
+                        if isinstance(node.value, (int, float)):
+                            return node.value
+                        raise ValueError("Unsupported constant type")
+                    if isinstance(node, ast.Num):  # pragma: no cover - legacy
+                        return node.n
+                    if isinstance(node, ast.BinOp):
+                        if type(node.op) not in allowed_operators:
+                            raise ValueError("Unsupported operator")
+                        return allowed_operators[type(node.op)](
+                            _eval(node.left), _eval(node.right)
+                        )
+                    if isinstance(node, ast.UnaryOp):
+                        if type(node.op) not in allowed_operators:
+                            raise ValueError("Unsupported unary operator")
+                        return allowed_operators[type(node.op)](_eval(node.operand))
+                    raise ValueError("Invalid expression")
+
+                parsed = ast.parse(expr, mode="eval")
+                return _eval(parsed.body)
+
+            result = safe_eval(expression)
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Result: {result}"
+                    }
+                ]
+            }
         except Exception as e:
             return {
                 "content": [
