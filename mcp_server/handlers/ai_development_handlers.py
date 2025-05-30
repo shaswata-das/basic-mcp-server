@@ -254,41 +254,19 @@ class CodebaseAnalysisHandler(HandlerInterface):
             self.logger.info(f"Processing batch {i//batch_size + 1}/{(len(all_files_to_process) + batch_size - 1)//batch_size}")
             
             for file_path, language in batch:
-                
-                # Determine language based on extension
-                language = self._determine_language(file_ext)
-                
+
                 # Extract knowledge from file
                 try:
-                    # For C# files, handle the language parameter specially to avoid MongoDB issues
-                    effective_language = "cs" if language.lower() == "csharp" else language
-                    
-                    # Extract knowledge
                     result = await self.code_extractor.extract_knowledge_from_file(file_path, language)
-                    
+
                     # Store in MongoDB
                     try:
-                        # Create a sanitized version of metadata for MongoDB
-                        # This prevents issues with unsupported language overrides
-                        sanitized_metadata = {}
-                        for key, value in result.items():
-                            if key != "language":  # Skip the language field that causes issues
-                                sanitized_metadata[key] = value
-                        
-                        # Use direct MongoDB collection access
-                        file_id = str(uuid.uuid4())
-                        await self.mongodb_service.code_files.update_one(
-                            {"repo_id": repo_id, "path": os.path.relpath(file_path, repo_path)},
-                            {"$set": {
-                                "file_id": file_id,
-                                "repo_id": repo_id,
-                                "path": os.path.relpath(file_path, repo_path),
-                                "language": effective_language,
-                                "size": os.path.getsize(file_path),
-                                "metadata": sanitized_metadata,
-                                "updated_at": datetime.datetime.now()
-                            }},
-                            upsert=True
+                        file_id = await self.mongodb_service.store_code_file(
+                            repo_id=repo_id,
+                            path=os.path.relpath(file_path, repo_path),
+                            language=language,
+                            content="",
+                            metadata=result,
                         )
                     except Exception as mongo_err:
                         self.logger.warning(f"MongoDB error for file {file_path}: {str(mongo_err)}")
@@ -564,7 +542,7 @@ Interfaces:
                 metadata={
                     "id": file_id,
                     "file_path": file_path,
-                    "language": language,
+                    "code_language": language,
                     "namespace": namespace,
                     "type": "file",
                     "repo_id": repo_id
@@ -670,7 +648,7 @@ class CodeSearchHandler(HandlerInterface):
             filter_params["type"] = "documentation"
         
         if language:
-            filter_params["language"] = language
+            filter_params["code_language"] = language
         
         # Search vector database
         collection_name = f"repo_{repo_id}_knowledge"
@@ -688,7 +666,7 @@ class CodeSearchHandler(HandlerInterface):
                 "type": result.get("type", "unknown"),
                 "file_path": result.get("file_path", ""),
                 "title": result.get("title", ""),
-                "language": result.get("language", ""),
+                "language": result.get("code_language", ""),
                 "namespace": result.get("namespace", ""),
                 "category": result.get("category", ""),
                 "content_preview": self._create_content_preview(result.get("code_text", ""))
@@ -837,7 +815,7 @@ class KnowledgeGraphQueryHandler(HandlerInterface):
         component_info = []
         for component in components:
             file_path = component.get("path", "Unknown")
-            language = component.get("language", "Unknown")
+            language = component.get("code_language", "Unknown")
             namespace = component.get("metadata", {}).get("namespace", "Unknown")
             
             # Look for the class in the component
