@@ -2,10 +2,10 @@
 Test script for enhanced knowledge extractors and documentation building
 """
 
+import argparse
 import os
 import asyncio
 import json
-from pathlib import Path
 
 from mcp_server.services.knowledge_extraction.environment_analyzer import EnvironmentAnalyzer
 from mcp_server.services.knowledge_extraction.pattern_extractor import PatternExtractor
@@ -13,11 +13,19 @@ from mcp_server.services.knowledge_extraction.code_extractor import CodeExtracto
 from mcp_server.services.knowledge_extraction.md_builder import MarkdownBuilder
 
 async def main():
-    # Set repository path
-    repo_path = "C:/workstation/orbitax-platform-api-fork"
-    
-    # Create output directory
-    output_dir = os.path.join(os.path.dirname(__file__), "analysis_output")
+    parser = argparse.ArgumentParser(description="Run knowledge extraction tests")
+    parser.add_argument("--repo-path", "--repo", dest="repo_path", default=os.environ.get("REPO_PATH"),
+                        help="Path to the repository to analyze")
+    parser.add_argument("--output-dir", "--output", dest="output_dir",
+                        default=os.environ.get("OUTPUT_DIR", os.path.join(os.path.dirname(__file__), "analysis_output")),
+                        help="Directory to store analysis results")
+    args = parser.parse_args()
+
+    repo_path = args.repo_path
+    if not repo_path:
+        parser.error("Repository path must be provided via --repo-path or REPO_PATH environment variable")
+
+    output_dir = args.output_dir
     os.makedirs(output_dir, exist_ok=True)
     
     print(f"Analyzing repository: {repo_path}")

@@ -5,6 +5,7 @@ This script uses the AI Development handlers to extract knowledge from a codebas
 generate documentation, and store knowledge in MongoDB and vector database.
 """
 
+import argparse
 import asyncio
 import os
 import logging
@@ -147,10 +148,24 @@ async def search_code(repo_id, query, search_type="all", limit=10):
 
 async def main():
     """Main entry point"""
-    # Set parameters
-    repo_path = "C:\\workstation\\orbitax-platform-api-fork"
-    output_dir = "C:\\Users\\shaswata\\Documents\\basic-mcp-server\\analysis_output"
-    file_limit = 500  # Limit files for testing
+    parser = argparse.ArgumentParser(description="Analyze a repository and build documentation")
+    parser.add_argument("--repo-path", "--repo", dest="repo_path", default=os.environ.get("REPO_PATH"),
+                        help="Path to the repository to analyze")
+    parser.add_argument("--output-dir", "--output", dest="output_dir",
+                        default=os.environ.get("OUTPUT_DIR", os.path.join(os.path.dirname(__file__), "analysis_output")),
+                        help="Directory to store analysis results")
+    parser.add_argument("--file-limit", dest="file_limit", type=int,
+                        default=int(os.environ.get("FILE_LIMIT", 500)),
+                        help="Maximum number of files to analyze")
+
+    args = parser.parse_args()
+
+    repo_path = args.repo_path
+    if not repo_path:
+        parser.error("Repository path must be provided via --repo-path or REPO_PATH environment variable")
+
+    output_dir = args.output_dir
+    file_limit = args.file_limit
     
     # Run analysis
     print(f"=== ANALYZING REPOSITORY: {repo_path} ===")

@@ -11,6 +11,7 @@ import asyncio
 from typing import Dict, List, Set, Tuple, Any, Optional
 import uuid
 import glob
+import aiofiles
 
 class CSharpScannerService:
     """Scanner for C# codebases"""
@@ -194,8 +195,8 @@ class CSharpScannerService:
         
         try:
             # Read solution file
-            with open(solution_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
+            async with aiofiles.open(solution_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = await f.read()
             
             # Extract project references
             project_pattern = re.compile(r'Project\("{[^}]+}"\) = "([^"]+)", "([^"]+)", "{([^}]+)}"')
@@ -235,8 +236,8 @@ class CSharpScannerService:
         """
         try:
             # Read file content
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
+            async with aiofiles.open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = await f.read()
             
             # Extract basic information
             relative_path = os.path.basename(file_path)
