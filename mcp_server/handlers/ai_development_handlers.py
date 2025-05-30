@@ -254,18 +254,11 @@ class CodebaseAnalysisHandler(HandlerInterface):
             self.logger.info(f"Processing batch {i//batch_size + 1}/{(len(all_files_to_process) + batch_size - 1)//batch_size}")
             
             for file_path, language in batch:
-                
-                # Determine language based on extension
-                language = self._determine_language(file_ext)
-                
+
                 # Extract knowledge from file
                 try:
-                    # For C# files, handle the language parameter specially to avoid MongoDB issues
-                    effective_language = "cs" if language.lower() == "csharp" else language
-                    
-                    # Extract knowledge
                     result = await self.code_extractor.extract_knowledge_from_file(file_path, language)
-                    
+
                     # Store in MongoDB
                     try:
                         # Create a sanitized version of metadata for MongoDB
@@ -837,7 +830,7 @@ class KnowledgeGraphQueryHandler(HandlerInterface):
         component_info = []
         for component in components:
             file_path = component.get("path", "Unknown")
-            language = component.get("language", "Unknown")
+            language = component.get("code_language", "Unknown")
             namespace = component.get("metadata", {}).get("namespace", "Unknown")
             
             # Look for the class in the component

@@ -48,12 +48,32 @@ class EmbeddingService:
         self.batch_size = batch_size
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        self.azure_api_url = azure_api_url or os.environ.get("EMBEDDINGS_3_LARGE_API_URL") or os.environ.get("EMBEDDINGS_3_SMALL_API_URL")
-        self.azure_api_key = azure_api_key or os.environ.get("EMBEDDINGS_3_LARGE_API_KEY") or os.environ.get("EMBEDDINGS_3_SMALL_API_KEY")
-        self.azure_deployment_name = azure_deployment_name or os.environ.get("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+        self.azure_api_url = azure_api_url
+        self.azure_api_key = azure_api_key
+        self.azure_deployment_name = (
+            azure_deployment_name
+            or os.environ.get("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+            or model.replace("-", "")
+        )
         
-        # Set provider based on model name and configuration
-        if model.startswith("text-embedding-3") and self.azure_api_url:
+        # Load Azure credentials from environment if not provided
+        if model == "text-embedding-3-large":
+            self.azure_api_url = self.azure_api_url or os.environ.get(
+                "EMBEDDINGS_3_LARGE_API_URL"
+            )
+            self.azure_api_key = self.azure_api_key or os.environ.get(
+                "EMBEDDINGS_3_LARGE_API_KEY"
+            )
+        elif model == "text-embedding-3-small":
+            self.azure_api_url = self.azure_api_url or os.environ.get(
+                "EMBEDDINGS_3_SMALL_API_URL"
+            )
+            self.azure_api_key = self.azure_api_key or os.environ.get(
+                "EMBEDDINGS_3_SMALL_API_KEY"
+            )
+
+        # Set provider based on available credentials and model
+        if model.startswith("text-embedding-3") and self.azure_api_url and self.azure_api_key:
             self.provider = "azure"
         elif model.startswith("text-embedding"):
             self.provider = "openai"
@@ -149,7 +169,10 @@ class EmbeddingService:
             List of embedding vectors
         """
         if not self.openai_api_key:
-            raise ValueError("OpenAI API key not configured")
+            self.logger.warning(
+                "OpenAI API key not configured, using mock embeddings"
+            )
+            return [self.create_mock_embedding(text) for text in texts]
         
         # Prepare API request
         headers = {
@@ -192,7 +215,10 @@ class EmbeddingService:
             List of embedding vectors
         """
         if not self.anthropic_api_key:
-            raise ValueError("Anthropic API key not configured")
+            self.logger.warning(
+                "Anthropic API key not configured, using mock embeddings"
+            )
+            return [self.create_mock_embedding(text) for text in texts]
         
         # Anthropic doesn't support batch embedding yet, so we need to process one by one
         embeddings = []
@@ -239,7 +265,10 @@ class EmbeddingService:
             List of embedding vectors
         """
         if not self.azure_api_key or not self.azure_api_url:
-            raise ValueError("Azure OpenAI API key or URL not configured")
+            self.logger.warning(
+                "Azure OpenAI credentials not configured, using mock embeddings"
+            )
+            return [self.create_mock_embedding(text) for text in texts]
         
         # Prepare API request
         headers = {
@@ -249,12 +278,13 @@ class EmbeddingService:
         
         data = {
             "input": texts,
-            "encoding_format": "float"
+            "model": self.model,
+            "encoding_format": "float",
         }
         
         # Determine API version and endpoint
         api_version = "2023-05-15"
-        deployment_name = self.model.replace("-", "")  # Azure needs deployment name without hyphens
+        deployment_name = self.azure_deployment_name
         
         # Make API request
         async with aiohttp.ClientSession() as session:

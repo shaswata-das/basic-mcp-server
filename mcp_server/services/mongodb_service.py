@@ -82,7 +82,11 @@ class MongoDBService:
             await self.chunks.create_index("vector_id")  # Link to Qdrant vector ID
             
             # Create a text index for code content search
-            await self.code_files.create_index([("content", TEXT)])
+            await self.code_files.create_index(
+                [("content", TEXT)],
+                default_language="none",
+                language_override="text_lang",
+            )
             
             self.logger.info("MongoDB indexes created successfully")
             return True

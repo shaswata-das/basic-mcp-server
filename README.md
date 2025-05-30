@@ -93,13 +93,16 @@ The server can be configured using environment variables in the `.env` file:
 | `OPENAI_DEFAULT_MODEL` | Default OpenAI model | "gpt-4o" |
 | `OPENAI_DEFAULT_MAX_TOKENS` | Default max tokens for OpenAI | 1024 |
 | `OPENAI_DEFAULT_TEMPERATURE` | Default temperature for OpenAI | 0.7 |
-| `EMBEDDINGS_3_LARGE_API_URL` | Azure endpoint for embedding-3-large | None |
-| `EMBEDDINGS_3_LARGE_API_KEY` | API key for embedding-3-large | None |
-| `EMBEDDINGS_3_SMALL_API_URL` | Azure endpoint for embedding-3-small | None |
-| `EMBEDDINGS_3_SMALL_API_KEY` | API key for embedding-3-small | None |
-| `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | Deployment name for Azure embeddings | None |
 
-If no API keys are configured for embedding providers, the server will generate deterministic mock embeddings for testing purposes.
+| `EMBEDDINGS_3_LARGE_API_URL` | Azure endpoint for `text-embedding-3-large` | None |
+| `EMBEDDINGS_3_LARGE_API_KEY` | API key for `text-embedding-3-large` | None |
+| `EMBEDDINGS_3_SMALL_API_URL` | Azure endpoint for `text-embedding-3-small` | None |
+| `EMBEDDINGS_3_SMALL_API_KEY` | API key for `text-embedding-3-small` | None |
+| `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | Azure deployment name for embeddings | `<model name>` |
+
+When embedding API credentials are not provided, the server will generate
+deterministic mock embeddings so that testing can proceed without external
+services.
 
 ## Usage
 
