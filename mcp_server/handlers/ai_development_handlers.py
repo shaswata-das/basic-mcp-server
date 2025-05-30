@@ -261,12 +261,27 @@ class CodebaseAnalysisHandler(HandlerInterface):
 
                     # Store in MongoDB
                     try:
-                        file_id = await self.mongodb_service.store_code_file(
-                            repo_id=repo_id,
-                            path=os.path.relpath(file_path, repo_path),
-                            language=language,
-                            content="",
-                            metadata=result,
+                        # Create a sanitized version of metadata for MongoDB
+                        # This prevents issues with unsupported language overrides
+                        sanitized_metadata = {}
+                        for key, value in result.items():
+                            if key != "language":  # Skip the language field that causes issues
+                                sanitized_metadata[key] = value
+                        
+                        # Use direct MongoDB collection access
+                        file_id = str(uuid.uuid4())
+                        await self.mongodb_service.code_files.update_one(
+                            {"repo_id": repo_id, "path": os.path.relpath(file_path, repo_path)},
+                            {"$set": {
+                                "file_id": file_id,
+                                "repo_id": repo_id,
+                                "path": os.path.relpath(file_path, repo_path),
+                                "code_language": effective_language,
+                                "size": os.path.getsize(file_path),
+                                "metadata": sanitized_metadata,
+                                "updated_at": datetime.datetime.now()
+                            }},
+                            upsert=True
                         )
                     except Exception as mongo_err:
                         self.logger.warning(f"MongoDB error for file {file_path}: {str(mongo_err)}")

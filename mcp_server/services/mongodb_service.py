@@ -156,7 +156,7 @@ class MongoDBService:
         Args:
             repo_id: Repository ID
             path: File path within the repository
-            language: Programming language
+            language: Programming language (stored as code_language)
             content: File content
             metadata: Additional metadata
             file_id: Optional file ID

@@ -93,6 +93,7 @@ The server can be configured using environment variables in the `.env` file:
 | `OPENAI_DEFAULT_MODEL` | Default OpenAI model | "gpt-4o" |
 | `OPENAI_DEFAULT_MAX_TOKENS` | Default max tokens for OpenAI | 1024 |
 | `OPENAI_DEFAULT_TEMPERATURE` | Default temperature for OpenAI | 0.7 |
+
 | `EMBEDDINGS_3_LARGE_API_URL` | Azure endpoint for `text-embedding-3-large` | None |
 | `EMBEDDINGS_3_LARGE_API_KEY` | API key for `text-embedding-3-large` | None |
 | `EMBEDDINGS_3_SMALL_API_URL` | Azure endpoint for `text-embedding-3-small` | None |
@@ -279,6 +280,11 @@ When using a TLS/SSL-terminating load balancer (like AWS ELB) in front of this s
 - The load balancer handles TLS/SSL termination
 - The load balancer forwards traffic to the MCP server using regular WebSockets (`ws://`)
 - No need to implement WSS in the application itself
+
+## Performance Considerations
+
+Processing very large repositories, especially C# projects, can generate many database operations.
+Consider batching inserts or using alternative storage strategies if you encounter performance issues with MongoDB.
 
 ## License
 
