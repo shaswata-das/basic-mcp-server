@@ -95,7 +95,7 @@ class QdrantVectorService:
         # Create index for code language
         self.client.create_payload_index(
             collection_name=self.collection_name,
-            field_name="language",
+            field_name="code_language",
             field_schema="keyword"
         )
         
@@ -125,7 +125,7 @@ class QdrantVectorService:
         Args:
             embedding: Vector embedding of the code
             code_text: The actual code text
-            metadata: Additional metadata (file_path, language, etc.)
+            metadata: Additional metadata (file_path, code_language, etc.)
             chunk_id: Optional ID for the chunk (generated if not provided)
             
         Returns:
@@ -213,7 +213,7 @@ class QdrantVectorService:
         
         Args:
             query_embedding: Vector embedding of the query
-            filter_params: Optional filter parameters (language, repo_id, etc.)
+            filter_params: Optional filter parameters (code_language, repo_id, etc.)
             limit: Maximum number of results to return
             
         Returns:
