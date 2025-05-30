@@ -1,0 +1,10 @@
+aiohttp
+aiofiles
+python-dotenv
+websockets
+psutil
+numpy
+motor
+pymongo
+qdrant-client
+networkx
