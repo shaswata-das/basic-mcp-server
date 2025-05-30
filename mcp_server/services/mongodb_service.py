@@ -55,7 +55,7 @@ class MongoDBService:
             await self.code_files.create_index("file_id", unique=True)
             await self.code_files.create_index("repo_id")
             await self.code_files.create_index("path")
-            await self.code_files.create_index("language")
+            await self.code_files.create_index("code_language")
             
             # Create indexes for classes (C#)
             await self.classes.create_index("class_id", unique=True)
@@ -152,7 +152,7 @@ class MongoDBService:
         Args:
             repo_id: Repository ID
             path: File path within the repository
-            language: Programming language
+            language: Programming language (stored as code_language)
             content: File content
             metadata: Additional metadata
             file_id: Optional file ID
@@ -169,7 +169,7 @@ class MongoDBService:
             "file_id": file_id,
             "repo_id": repo_id,
             "path": path,
-            "language": language,
+            "code_language": language,
             "content": content,
             "size": len(content),
             "updated_at": datetime.datetime.utcnow(),
@@ -491,7 +491,7 @@ class MongoDBService:
             search_query["repo_id"] = repo_id
         
         if language:
-            search_query["language"] = language
+            search_query["code_language"] = language
         
         # Execute search
         cursor = self.code_files.find(

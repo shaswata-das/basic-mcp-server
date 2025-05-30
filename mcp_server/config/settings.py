@@ -65,6 +65,8 @@ class MCPServerConfig:
     
     embeddings_3_small_api_url: Optional[str] = None
     embeddings_3_small_api_key: Optional[str] = None
+
+    azure_openai_embedding_deployment: Optional[str] = None
     
     # Available models
     claude_models: list = None
@@ -190,6 +192,8 @@ class MCPServerConfig:
         
         config.embeddings_3_small_api_url = os.environ.get("EMBEDDINGS_3_SMALL_API_URL")
         config.embeddings_3_small_api_key = os.environ.get("EMBEDDINGS_3_SMALL_API_KEY")
+
+        config.azure_openai_embedding_deployment = os.environ.get("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
         
         return config
     

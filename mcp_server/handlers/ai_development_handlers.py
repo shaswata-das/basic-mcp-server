@@ -283,7 +283,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
                                 "file_id": file_id,
                                 "repo_id": repo_id,
                                 "path": os.path.relpath(file_path, repo_path),
-                                "language": effective_language,
+                                "code_language": effective_language,
                                 "size": os.path.getsize(file_path),
                                 "metadata": sanitized_metadata,
                                 "updated_at": datetime.datetime.now()
@@ -564,7 +564,7 @@ Interfaces:
                 metadata={
                     "id": file_id,
                     "file_path": file_path,
-                    "language": language,
+                    "code_language": language,
                     "namespace": namespace,
                     "type": "file",
                     "repo_id": repo_id
@@ -670,7 +670,7 @@ class CodeSearchHandler(HandlerInterface):
             filter_params["type"] = "documentation"
         
         if language:
-            filter_params["language"] = language
+            filter_params["code_language"] = language
         
         # Search vector database
         collection_name = f"repo_{repo_id}_knowledge"
@@ -688,7 +688,7 @@ class CodeSearchHandler(HandlerInterface):
                 "type": result.get("type", "unknown"),
                 "file_path": result.get("file_path", ""),
                 "title": result.get("title", ""),
-                "language": result.get("language", ""),
+                "language": result.get("code_language", ""),
                 "namespace": result.get("namespace", ""),
                 "category": result.get("category", ""),
                 "content_preview": self._create_content_preview(result.get("code_text", ""))
