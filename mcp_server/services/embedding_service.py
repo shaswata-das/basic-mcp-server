@@ -10,6 +10,8 @@ import time
 import os
 from typing import List, Dict, Any, Optional, Union
 
+from mcp_server.services.secrets_manager import get_secrets_manager
+
 import aiohttp
 import numpy as np
 
@@ -42,8 +44,9 @@ class EmbeddingService:
             azure_deployment_name: Azure deployment name (optional)
         """
         self.logger = logging.getLogger("mcp_server.services.embedding")
-        self.openai_api_key = openai_api_key
-        self.anthropic_api_key = anthropic_api_key
+        secrets = get_secrets_manager()
+        self.openai_api_key = openai_api_key or secrets.get("OPENAI_API_KEY")
+        self.anthropic_api_key = anthropic_api_key or secrets.get("ANTHROPIC_API_KEY")
         self.model = model
         self.batch_size = batch_size
         self.max_retries = max_retries
@@ -56,19 +59,19 @@ class EmbeddingService:
             or model.replace("-", "")
         )
         
-        # Load Azure credentials from environment if not provided
+        # Load Azure credentials from environment or secrets if not provided
         if model == "text-embedding-3-large":
             self.azure_api_url = self.azure_api_url or os.environ.get(
                 "EMBEDDINGS_3_LARGE_API_URL"
             )
-            self.azure_api_key = self.azure_api_key or os.environ.get(
+            self.azure_api_key = self.azure_api_key or secrets.get(
                 "EMBEDDINGS_3_LARGE_API_KEY"
             )
         elif model == "text-embedding-3-small":
             self.azure_api_url = self.azure_api_url or os.environ.get(
                 "EMBEDDINGS_3_SMALL_API_URL"
             )
-            self.azure_api_key = self.azure_api_key or os.environ.get(
+            self.azure_api_key = self.azure_api_key or secrets.get(
                 "EMBEDDINGS_3_SMALL_API_KEY"
             )
 
