@@ -58,13 +58,20 @@ class CodebaseAnalysisHandler(HandlerInterface):
         
         self.logger = logging.getLogger("mcp_server.handlers.codebase_analysis")
     
-    def _save_intermediate_results(self, file_count: int, file_results: List[Dict], output_dir: str) -> None:
+    def _save_intermediate_results(
+        self,
+        file_count: int,
+        file_results: List[Dict],
+        output_dir: str,
+        error_files: List[Dict]
+    ) -> None:
         """Save intermediate results to allow for recovery in case of failure
         
         Args:
             file_count: Number of files processed
             file_results: Results of file processing
             output_dir: Directory to save intermediate results
+            error_files: Files that failed to process
         """
         try:
             # Create a checkpoint directory if it doesn't exist
@@ -82,14 +89,15 @@ class CodebaseAnalysisHandler(HandlerInterface):
                 "files": [
                     {
                         "file_path": item["file_path"],
-                        "language": item["language"],
+                        "code_language": item["code_language"],
                         "file_id": item.get("file_id", ""),
                         "class_count": len(item["result"].get("classes", [])),
                         "interface_count": len(item["result"].get("interfaces", [])),
                         "namespace": item["result"].get("namespace", "Unknown")
                     }
                     for item in file_results[-100:]  # Only save the last 100 files for efficiency
-                ]
+                ],
+                "errors": error_files[-100:]
             }
             
             with open(checkpoint_file, "w", encoding="utf-8") as f:
@@ -178,6 +186,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
         # Extract code content
         self.logger.info("Extracting code content...")
         file_results = []
+        error_files = []
         file_count = 0
         
         # Check for existing checkpoint to resume processing
@@ -200,6 +209,9 @@ class CodebaseAnalysisHandler(HandlerInterface):
                         # Get processed files from checkpoint
                         for file_info in checkpoint_data.get("files", []):
                             processed_files.add(file_info.get("file_path", ""))
+
+                        for error in checkpoint_data.get("errors", []):
+                            processed_files.add(error.get("file_path", ""))
                             
                         file_count = checkpoint_data.get("file_count", 0)
                         self.logger.info(f"Resuming from checkpoint with {file_count} files already processed")
@@ -265,8 +277,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
                         # This prevents issues with unsupported language overrides
                         sanitized_metadata = {}
                         for key, value in result.items():
-                            if key != "language":  # Skip the language field that causes issues
-                                sanitized_metadata[key] = value
+                            sanitized_metadata[key] = value
                         
                         # Use direct MongoDB collection access
                         file_id = str(uuid.uuid4())
@@ -290,7 +301,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
                     # Add to results
                     file_results.append({
                         "file_path": file_path,
-                        "language": language,
+                        "code_language": language,
                         "result": result,
                         "file_id": file_id
                     })
@@ -301,7 +312,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
                     if file_count % 50 == 0:
                         self.logger.info(f"Processed {file_count} files...")
                         # Save intermediate results to allow for recovery
-                        self._save_intermediate_results(file_count, file_results, output_dir)
+                        self._save_intermediate_results(file_count, file_results, output_dir, error_files)
                     
                     # Check file limit
                     if file_count >= file_limit:
@@ -310,6 +321,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
                 
                 except Exception as e:
                     self.logger.warning(f"Error processing file {file_path}: {str(e)}")
+                    error_files.append({"file_path": file_path, "error": str(e)})
                     # Continue processing other files despite errors
             
             # Check file limit
@@ -321,11 +333,11 @@ class CodebaseAnalysisHandler(HandlerInterface):
             # We don't save the full results to avoid large files
             summary = {
                 "file_count": file_count,
-                "languages": list(set(item["language"] for item in file_results if "language" in item)),
+                "languages": list(set(item["code_language"] for item in file_results if "code_language" in item)),
                 "files": [
                     {
                         "file_path": item["file_path"],
-                        "language": item["language"],
+                        "code_language": item["code_language"],
                         "class_count": len(item["result"].get("classes", [])),
                         "interface_count": len(item["result"].get("interfaces", [])),
                         "namespace": item["result"].get("namespace", "Unknown")
@@ -334,6 +346,9 @@ class CodebaseAnalysisHandler(HandlerInterface):
                 ]
             }
             json.dump(summary, f, indent=2)
+
+        # Save final checkpoint
+        self._save_intermediate_results(file_count, file_results, output_dir, error_files)
         
         # Build knowledge structure
         knowledge = {
@@ -529,7 +544,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
             if not file_path:
                 continue
                 
-            language = file_info.get("language", "unknown")
+            language = file_info.get("code_language", "unknown")
             namespace = file_info.get("namespace", "unknown")
             
             # Create text representation for embedding
@@ -681,7 +696,7 @@ class CodeSearchHandler(HandlerInterface):
                 "type": result.get("type", "unknown"),
                 "file_path": result.get("file_path", ""),
                 "title": result.get("title", ""),
-                "language": result.get("code_language", ""),
+                "code_language": result.get("code_language", ""),
                 "namespace": result.get("namespace", ""),
                 "category": result.get("category", ""),
                 "content_preview": self._create_content_preview(result.get("code_text", ""))
@@ -841,7 +856,7 @@ class KnowledgeGraphQueryHandler(HandlerInterface):
                         "name": cls.get("name"),
                         "type": "class",
                         "file_path": file_path,
-                        "language": language,
+                        "code_language": language,
                         "namespace": namespace,
                         "inheritance": cls.get("inheritance", []),
                         "methods": cls.get("methods", []),
@@ -856,7 +871,7 @@ class KnowledgeGraphQueryHandler(HandlerInterface):
                         "name": interface.get("name"),
                         "type": "interface",
                         "file_path": file_path,
-                        "language": language,
+                        "code_language": language,
                         "namespace": namespace,
                         "inheritance": interface.get("inheritance", [])
                     })

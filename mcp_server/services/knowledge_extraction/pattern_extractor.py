@@ -52,11 +52,11 @@ class PatternExtractor:
         
         # Filter files by language if specified
         if language:
-            files = [f for f in files if f.get("language", "").lower() == language.lower()]
+            files = [f for f in files if f.get("code_language", "").lower() == language.lower()]
         
         # First, analyze all files
         for file_info in files:
-            language = file_info.get("language", "unknown").lower()
+            language = file_info.get("code_language", "unknown").lower()
             
             # Extract patterns based on language
             if language in ["csharp", "cs", "c#"]:
