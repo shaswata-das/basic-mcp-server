@@ -77,6 +77,7 @@ The server can be configured using environment variables in the `.env` file:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `AI_SERVICE_TYPE` | Default AI service to use ("claude", "openai", "mock") | "claude" |
+| `SECRETS_FILE` | Path to JSON file with API secrets | None |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key | None |
 | `OPENAI_API_KEY` | Your OpenAI API key | None |
 | `MCP_SERVER_NAME` | Name of the server | "ai-mcp-server" |
@@ -110,6 +111,12 @@ For production deployments, configure `QDRANT_URL` to point to a dedicated
 Qdrant server. Using a remote server provides persistent storage and improved
 vector search performance compared to the default in-memory mode.
 
+The optional `SECRETS_FILE` variable allows you to store API keys in a JSON
+file instead of environment variables. Values defined in the secrets file are
+used when corresponding environment variables are not set. If a secret value is
+an array, the server will rotate through the values each time the key is
+requested, enabling simple key rotation strategies.
+
 ## Usage
 
 ### Running the Server
@@ -135,7 +142,9 @@ python mcp_server.py --websocket --host 127.0.0.1 --port 8765 --ws-path /
 usage: mcp_server.py [-h] [--tcp | --websocket] [--host HOST] [--port PORT]
                      [--ws-path WS_PATH] [--service-type {claude,openai,mock}]
                      [--claude-api-key CLAUDE_API_KEY]
-                     [--openai-api-key OPENAI_API_KEY] [--mock]
+                     [--openai-api-key OPENAI_API_KEY]
+                     [--qdrant-url QDRANT_URL]
+                     [--qdrant-api-key QDRANT_API_KEY] [--mock]
                      [--log-level {DEBUG,INFO,WARNING,ERROR}]
                      [--env-file ENV_FILE]
 
@@ -160,7 +169,11 @@ AI Service Options:
   --claude-api-key CLAUDE_API_KEY
                         Anthropic API key
   --openai-api-key OPENAI_API_KEY
-                        OpenAI API key
+                          OpenAI API key
+  --qdrant-url QDRANT_URL
+                          Qdrant server URL
+  --qdrant-api-key QDRANT_API_KEY
+                          Qdrant API key
   --mock                Use mock AI service (for testing)
 ```
 

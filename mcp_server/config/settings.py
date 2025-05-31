@@ -11,6 +11,8 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 
+from mcp_server.services.secrets_manager import get_secrets_manager
+
 # Import dotenv for .env file support
 try:
     from dotenv import load_dotenv
@@ -67,6 +69,10 @@ class MCPServerConfig:
     embeddings_3_small_api_key: Optional[str] = None
 
     azure_openai_embedding_deployment: Optional[str] = None
+
+    # Vector store settings
+    qdrant_url: Optional[str] = None
+    qdrant_api_key: Optional[str] = None
     
     # Available models
     claude_models: list = None
@@ -104,6 +110,7 @@ class MCPServerConfig:
     def from_env(cls) -> "MCPServerConfig":
         """Create a configuration from environment variables"""
         config = cls()
+        secrets = get_secrets_manager()
         
         # Load environment variables if they exist
         if os.environ.get("MCP_SERVER_NAME"):
@@ -146,9 +153,9 @@ class MCPServerConfig:
         if os.environ.get("AI_SERVICE_TYPE"):
             config.ai_service_type = os.environ.get("AI_SERVICE_TYPE")
             
-        # API keys
-        config.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
-        config.openai_api_key = os.environ.get("OPENAI_API_KEY")
+        # API keys (use secrets manager for optional rotation)
+        config.anthropic_api_key = secrets.get("ANTHROPIC_API_KEY")
+        config.openai_api_key = secrets.get("OPENAI_API_KEY")
         
         # Claude settings
         if os.environ.get("CLAUDE_DEFAULT_MODEL"):
@@ -188,10 +195,13 @@ class MCPServerConfig:
             
         # Azure OpenAI Embedding settings
         config.embeddings_3_large_api_url = os.environ.get("EMBEDDINGS_3_LARGE_API_URL")
-        config.embeddings_3_large_api_key = os.environ.get("EMBEDDINGS_3_LARGE_API_KEY")
-        
+        config.embeddings_3_large_api_key = secrets.get("EMBEDDINGS_3_LARGE_API_KEY")
+
         config.embeddings_3_small_api_url = os.environ.get("EMBEDDINGS_3_SMALL_API_URL")
-        config.embeddings_3_small_api_key = os.environ.get("EMBEDDINGS_3_SMALL_API_KEY")
+        config.embeddings_3_small_api_key = secrets.get("EMBEDDINGS_3_SMALL_API_KEY")
+
+        config.qdrant_url = secrets.get("QDRANT_URL")
+        config.qdrant_api_key = secrets.get("QDRANT_API_KEY")
 
         config.azure_openai_embedding_deployment = os.environ.get("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
         
@@ -230,5 +240,11 @@ class MCPServerConfig:
             
         if args.get("openai_api_key"):
             config.openai_api_key = args.get("openai_api_key")
-        
+
+        if args.get("qdrant_url"):
+            config.qdrant_url = args.get("qdrant_url")
+
+        if args.get("qdrant_api_key"):
+            config.qdrant_api_key = args.get("qdrant_api_key")
+
         return config
