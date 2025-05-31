@@ -17,6 +17,7 @@ from mcp_server.services.mongodb_service import MongoDBService
 from mcp_server.services.embedding_service import EmbeddingService
 from mcp_server.services.vector_store.qdrant_service import QdrantVectorService
 from mcp_server.handlers.ai_development_handlers import CodebaseAnalysisHandler
+from mcp_server.handlers.ai_development_handlers import CodeSearchHandler
 
 
 async def analyze_repository(repo_path, output_dir, file_limit=1000):
@@ -195,10 +196,6 @@ async def main():
         
         print(f"\n=== SEARCHING FOR ARCHITECTURE ===")
         await search_code(repo_id, "Explain the architecture of this system", "documentation")
-
-
-# Add import for search handler if needed
-from mcp_server.handlers.ai_development_handlers import CodeSearchHandler
 
 if __name__ == "__main__":
     asyncio.run(main())

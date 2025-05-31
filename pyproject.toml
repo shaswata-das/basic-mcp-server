@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "basic-mcp-server"
+version = "1.0.0"
+description = "Model Context Protocol server with multiple AI service integrations"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.8"
+dependencies = [
+    "aiohttp",
+    "aiofiles",
+    "python-dotenv",
+    "websockets",
+    "psutil",
+    "numpy",
+    "motor",
+    "pymongo",
+    "qdrant-client",
+    "networkx",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
