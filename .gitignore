@@ -49,3 +49,6 @@ Thumbs.db
 # Test coverage
 .coverage
 htmlcov/
+
+# Generated Analysis
+analysis_output/*
