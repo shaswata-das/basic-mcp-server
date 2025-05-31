@@ -293,14 +293,16 @@ class KnowledgeExtractionHandler(HandlerInterface):
         # Configure embedding service with the appropriate model
         self.embedding_service.model = embedding_model
         
-        # Set Azure credentials from environment
+        # Set Azure credentials from secrets manager/environment
+        from mcp_server.services.secrets_manager import get_secrets_manager
+        secrets = get_secrets_manager()
         if embedding_model == "text-embedding-3-large":
             self.embedding_service.azure_api_url = os.environ.get("EMBEDDINGS_3_LARGE_API_URL")
-            self.embedding_service.azure_api_key = os.environ.get("EMBEDDINGS_3_LARGE_API_KEY")
+            self.embedding_service.azure_api_key = secrets.get("EMBEDDINGS_3_LARGE_API_KEY")
             self.embedding_service.provider = "azure"
         elif embedding_model == "text-embedding-3-small":
             self.embedding_service.azure_api_url = os.environ.get("EMBEDDINGS_3_SMALL_API_URL")
-            self.embedding_service.azure_api_key = os.environ.get("EMBEDDINGS_3_SMALL_API_KEY")
+            self.embedding_service.azure_api_key = secrets.get("EMBEDDINGS_3_SMALL_API_KEY")
             self.embedding_service.provider = "azure"
             
         self.logger = logging.getLogger("mcp_server.handlers.knowledge_extraction")

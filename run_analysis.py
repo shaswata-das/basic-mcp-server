@@ -37,7 +37,11 @@ async def analyze_repository(repo_path, output_dir, file_limit=1000):
     # Create services
     mongodb_service = MongoDBService(uri="mongodb://localhost:27017", db_name="mcp-server")
     embedding_service = EmbeddingService(model="text-embedding-3-small")
-    vector_service = QdrantVectorService()
+    from mcp_server.services.secrets_manager import get_secrets_manager
+    secrets = get_secrets_manager()
+    qdrant_url = secrets.get("QDRANT_URL")
+    qdrant_api_key = secrets.get("QDRANT_API_KEY")
+    vector_service = QdrantVectorService(url=qdrant_url, api_key=qdrant_api_key)
     
     # Create handler
     codebase_analyzer = CodebaseAnalysisHandler(
@@ -101,7 +105,11 @@ async def search_code(repo_id, query, search_type="all", limit=10):
     # Create services
     mongodb_service = MongoDBService(uri="mongodb://localhost:27017", db_name="mcp-server")
     embedding_service = EmbeddingService(model="text-embedding-3-small")
-    vector_service = QdrantVectorService()
+    from mcp_server.services.secrets_manager import get_secrets_manager
+    secrets = get_secrets_manager()
+    qdrant_url = secrets.get("QDRANT_URL")
+    qdrant_api_key = secrets.get("QDRANT_API_KEY")
+    vector_service = QdrantVectorService(url=qdrant_url, api_key=qdrant_api_key)
     
     # Create handler
     code_search = CodeSearchHandler(
@@ -129,7 +137,7 @@ async def search_code(repo_id, query, search_type="all", limit=10):
             
             if result.get("type") == "file":
                 print(f"File: {result.get('file_path')}")
-                print(f"Language: {result.get('language')}")
+                print(f"Language: {result.get('code_language')}")
                 print(f"Namespace: {result.get('namespace')}")
             else:
                 print(f"Title: {result.get('title')}")

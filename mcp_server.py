@@ -109,8 +109,10 @@ class AIMCPServerApp(MCPServer):
             model="text-embedding-3-small" if openai_api_key else "claude-3-haiku-20240307"
         )
         
-        # Create vector store service (in-memory for now)
-        vector_service = QdrantVectorService()
+        # Create vector store service
+        qdrant_url = self.config.qdrant_url
+        qdrant_api_key = self.config.qdrant_api_key
+        vector_service = QdrantVectorService(url=qdrant_url, api_key=qdrant_api_key)
         
         # Create MongoDB service
         mongodb_service = MongoDBService(
@@ -604,6 +606,8 @@ async def main():
                             help='AI service to use (can also set AI_SERVICE_TYPE in .env)')
     service_group.add_argument('--claude-api-key', help='Anthropic API key (can also set ANTHROPIC_API_KEY in .env)')
     service_group.add_argument('--openai-api-key', help='OpenAI API key (can also set OPENAI_API_KEY in .env)')
+    service_group.add_argument('--qdrant-url', help='Qdrant server URL (can also set QDRANT_URL in secrets)')
+    service_group.add_argument('--qdrant-api-key', help='Qdrant API key (can also set QDRANT_API_KEY in secrets)')
     service_group.add_argument('--mock', action='store_true', help='Use mock AI service (for testing)')
     
     # Other options

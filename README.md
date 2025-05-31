@@ -77,6 +77,7 @@ The server can be configured using environment variables in the `.env` file:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `AI_SERVICE_TYPE` | Default AI service to use ("claude", "openai", "mock") | "claude" |
+| `SECRETS_FILE` | Path to JSON file with API secrets | None |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key | None |
 | `OPENAI_API_KEY` | Your OpenAI API key | None |
 | `MCP_SERVER_NAME` | Name of the server | "ai-mcp-server" |
@@ -93,6 +94,28 @@ The server can be configured using environment variables in the `.env` file:
 | `OPENAI_DEFAULT_MODEL` | Default OpenAI model | "gpt-4o" |
 | `OPENAI_DEFAULT_MAX_TOKENS` | Default max tokens for OpenAI | 1024 |
 | `OPENAI_DEFAULT_TEMPERATURE` | Default temperature for OpenAI | 0.7 |
+
+| `EMBEDDINGS_3_LARGE_API_URL` | Azure endpoint for `text-embedding-3-large` | None |
+| `EMBEDDINGS_3_LARGE_API_KEY` | API key for `text-embedding-3-large` | None |
+| `EMBEDDINGS_3_SMALL_API_URL` | Azure endpoint for `text-embedding-3-small` | None |
+| `EMBEDDINGS_3_SMALL_API_KEY` | API key for `text-embedding-3-small` | None |
+| `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | Azure deployment name for embeddings | `<model name>` |
+| `QDRANT_URL` | URL of the Qdrant server (use `:memory:` for in-memory) | None |
+| `QDRANT_API_KEY` | API key for Qdrant Cloud | None |
+
+When embedding API credentials are not provided, the server will generate
+deterministic mock embeddings so that testing can proceed without external
+services.
+
+For production deployments, configure `QDRANT_URL` to point to a dedicated
+Qdrant server. Using a remote server provides persistent storage and improved
+vector search performance compared to the default in-memory mode.
+
+The optional `SECRETS_FILE` variable allows you to store API keys in a JSON
+file instead of environment variables. Values defined in the secrets file are
+used when corresponding environment variables are not set. If a secret value is
+an array, the server will rotate through the values each time the key is
+requested, enabling simple key rotation strategies.
 
 ## Usage
 
@@ -119,7 +142,9 @@ python mcp_server.py --websocket --host 127.0.0.1 --port 8765 --ws-path /
 usage: mcp_server.py [-h] [--tcp | --websocket] [--host HOST] [--port PORT]
                      [--ws-path WS_PATH] [--service-type {claude,openai,mock}]
                      [--claude-api-key CLAUDE_API_KEY]
-                     [--openai-api-key OPENAI_API_KEY] [--mock]
+                     [--openai-api-key OPENAI_API_KEY]
+                     [--qdrant-url QDRANT_URL]
+                     [--qdrant-api-key QDRANT_API_KEY] [--mock]
                      [--log-level {DEBUG,INFO,WARNING,ERROR}]
                      [--env-file ENV_FILE]
 
@@ -144,7 +169,11 @@ AI Service Options:
   --claude-api-key CLAUDE_API_KEY
                         Anthropic API key
   --openai-api-key OPENAI_API_KEY
-                        OpenAI API key
+                          OpenAI API key
+  --qdrant-url QDRANT_URL
+                          Qdrant server URL
+  --qdrant-api-key QDRANT_API_KEY
+                          Qdrant API key
   --mock                Use mock AI service (for testing)
 ```
 
@@ -270,6 +299,11 @@ When using a TLS/SSL-terminating load balancer (like AWS ELB) in front of this s
 - The load balancer handles TLS/SSL termination
 - The load balancer forwards traffic to the MCP server using regular WebSockets (`ws://`)
 - No need to implement WSS in the application itself
+
+## Performance Considerations
+
+Processing very large repositories, especially C# projects, can generate many database operations.
+Consider batching inserts or using alternative storage strategies if you encounter performance issues with MongoDB.
 
 ## License
 

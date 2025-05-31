@@ -186,7 +186,7 @@ class CodeExtractor:
         
         return {
             "file_path": file_path,
-            "language": "csharp",
+            "code_language": "csharp",
             "namespace": namespace,
             "classes": classes,
             "interfaces": interfaces,
@@ -304,7 +304,7 @@ class CodeExtractor:
         
         return {
             "file_path": file_path,
-            "language": "typescript" if file_path.endswith(".ts") else "javascript",
+            "code_language": "typescript" if file_path.endswith(".ts") else "javascript",
             "is_angular": is_angular,
             "classes": classes,
             "imports": imports,
@@ -454,7 +454,7 @@ class CodeExtractor:
             
             return {
                 "file_path": file_path,
-                "language": "python",
+                "code_language": "python",
                 "imports": imports,
                 "classes": classes,
                 "functions": functions,
@@ -538,7 +538,7 @@ class CodeExtractor:
         
         return {
             "file_path": file_path,
-            "language": language,
+            "code_language": language,
             "line_count": line_count,
             "empty_line_count": empty_lines,
             "comment_line_count": comment_lines,
@@ -547,4 +547,6 @@ class CodeExtractor:
             "imports": list(set(imports)),  # Deduplicate imports
             "content_length": len(content),
             "file_name": filename
+        
+
         }
