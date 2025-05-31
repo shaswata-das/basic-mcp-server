@@ -63,7 +63,7 @@ basic-mcp-server/
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install aiohttp aiofiles python-dotenv websockets psutil
+   pip install -e .
    ```
 
 3. Configure your environment by editing the `.env` file with your API keys and settings.
