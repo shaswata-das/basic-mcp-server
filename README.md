@@ -99,10 +99,16 @@ The server can be configured using environment variables in the `.env` file:
 | `EMBEDDINGS_3_SMALL_API_URL` | Azure endpoint for `text-embedding-3-small` | None |
 | `EMBEDDINGS_3_SMALL_API_KEY` | API key for `text-embedding-3-small` | None |
 | `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | Azure deployment name for embeddings | `<model name>` |
+| `QDRANT_URL` | URL of the Qdrant server (use `:memory:` for in-memory) | None |
+| `QDRANT_API_KEY` | API key for Qdrant Cloud | None |
 
 When embedding API credentials are not provided, the server will generate
 deterministic mock embeddings so that testing can proceed without external
 services.
+
+For production deployments, configure `QDRANT_URL` to point to a dedicated
+Qdrant server. Using a remote server provides persistent storage and improved
+vector search performance compared to the default in-memory mode.
 
 ## Usage
 

@@ -132,7 +132,7 @@ class EnhancedRepositoryAnalysisHandler(HandlerInterface):
                         file_infos.append({
                             "file_path": file_path,
                             "rel_path": rel_path,
-                            "language": language,
+                            "code_language": language,
                             **knowledge
                         })
                         
@@ -214,7 +214,7 @@ class EnhancedRepositoryAnalysisHandler(HandlerInterface):
             try:
                 env_results = await self.environment_analyzer.analyze_environment(
                     repo_path=repo_path,
-                    repo_languages=list(set(f.get("language") for f in file_infos if f.get("language")))
+                    repo_languages=list(set(f.get("code_language") for f in file_infos if f.get("code_language")))
                 )
                 
                 # Store environment analysis
@@ -422,7 +422,7 @@ class EnhancedCodeSearchHandler(HandlerInterface):
         # Prepare filter
         filter_params = {"repo_id": repo_id}
         if language_filter:
-            filter_params["language"] = language_filter
+            filter_params["code_language"] = language_filter
         
         # Search for similar code
         search_results = await self.vector_service.search_similar_code(
@@ -437,7 +437,7 @@ class EnhancedCodeSearchHandler(HandlerInterface):
             item = {
                 "id": result.get("id"),
                 "file_path": result.get("file_path", "Unknown"),
-                "language": result.get("language", "Unknown"),
+                "code_language": result.get("code_language", "Unknown"),
                 "score": result.get("score", 0.0),
                 "type": result.get("type", "Unknown")
             }

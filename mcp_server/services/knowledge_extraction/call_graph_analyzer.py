@@ -51,7 +51,7 @@ class CallGraphAnalyzer:
         
         # Filter files by language if specified
         if language:
-            files = [f for f in files if f.get("language", "").lower() == language.lower()]
+            files = [f for f in files if f.get("code_language", "").lower() == language.lower()]
         
         # Filter out excluded files
         for pattern in exclude_patterns:
@@ -60,7 +60,7 @@ class CallGraphAnalyzer:
         # Analyze each file based on its language
         for file_info in files:
             file_path = file_info.get("file_path")
-            file_language = file_info.get("language", "unknown")
+            file_language = file_info.get("code_language", "unknown")
             
             if file_language.lower() in ["csharp", "cs", "c#"]:
                 await self._analyze_csharp_file(file_info)
@@ -493,7 +493,7 @@ class CallGraphAnalyzer:
             nodes.append({
                 "id": node_id,
                 "type": node_data.get("type", "unknown"),
-                "language": node_data.get("language", "unknown"),
+                "code_language": node_data.get("code_language", "unknown"),
                 "file_path": node_data.get("file_path", "unknown"),
                 "degree": self.call_graph.degree(node_id)
             })
@@ -621,7 +621,7 @@ class CallGraphAnalyzer:
             data["nodes"].append({
                 "id": node_id,
                 "type": node_data.get("type", "unknown"),
-                "language": node_data.get("language", "unknown"),
+                "code_language": node_data.get("code_language", "unknown"),
                 "file_path": node_data.get("file_path", "unknown")
             })
         
@@ -674,7 +674,7 @@ class CallGraphAnalyzer:
         return {
             "component": component_id,
             "type": self.call_graph.nodes[component_id].get("type", "unknown"),
-            "language": self.call_graph.nodes[component_id].get("language", "unknown"),
+            "code_language": self.call_graph.nodes[component_id].get("code_language", "unknown"),
             "file_path": self.call_graph.nodes[component_id].get("file_path", "unknown"),
             "dependencies": {
                 "incoming": incoming,

@@ -109,8 +109,10 @@ class AIMCPServerApp(MCPServer):
             model="text-embedding-3-small" if openai_api_key else "claude-3-haiku-20240307"
         )
         
-        # Create vector store service (in-memory for now)
-        vector_service = QdrantVectorService()
+        # Create vector store service
+        qdrant_url = os.getenv("QDRANT_URL")
+        qdrant_api_key = os.getenv("QDRANT_API_KEY")
+        vector_service = QdrantVectorService(url=qdrant_url, api_key=qdrant_api_key)
         
         # Create MongoDB service
         mongodb_service = MongoDBService(
