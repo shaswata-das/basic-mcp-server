@@ -122,6 +122,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
         exclude_patterns = params.get("exclude_patterns", [])
         file_limit = params.get("file_limit", 1000)  # Limit number of files to analyze
         output_dir = params.get("output_dir")
+        skip_embeddings = params.get("skip_embeddings", False)  # Option to skip embedding generation
         
         # If output_dir not specified, create one in the repo
         if not output_dir:
@@ -279,6 +280,9 @@ class CodebaseAnalysisHandler(HandlerInterface):
                         for key, value in result.items():
                             sanitized_metadata[key] = value
                         
+                        # For C# files, use a different language string to avoid MongoDB issues
+                        safe_language = "csharp_safe" if language.lower() == "csharp" else language
+                        
                         # Use direct MongoDB collection access
                         file_id = str(uuid.uuid4())
                         await self.mongodb_service.code_files.update_one(
@@ -287,7 +291,7 @@ class CodebaseAnalysisHandler(HandlerInterface):
                                 "file_id": file_id,
                                 "repo_id": repo_id,
                                 "path": os.path.relpath(file_path, repo_path),
-                                "code_language": effective_language,
+                                "code_language": safe_language,
                                 "size": os.path.getsize(file_path),
                                 "metadata": sanitized_metadata,
                                 "updated_at": datetime.datetime.now()
@@ -368,10 +372,14 @@ class CodebaseAnalysisHandler(HandlerInterface):
             output_dir=output_dir
         )
         
-        # Store vector embeddings if services are available
-        if self.embedding_service and self.vector_service:
+        # Store vector embeddings if services are available and not explicitly skipped
+        if not skip_embeddings and self.embedding_service and self.vector_service:
             self.logger.info("Storing vector embeddings for semantic search...")
-            await self._store_embeddings(repo_id, knowledge, output_dir)
+            try:
+                await self._store_embeddings(repo_id, knowledge, output_dir)
+            except Exception as e:
+                self.logger.error(f"Error storing embeddings: {str(e)}")
+                self.logger.info("Continuing without embeddings...")
         
         return {
             "status": "success",

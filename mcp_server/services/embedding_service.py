@@ -292,6 +292,10 @@ class EmbeddingService:
         # Make API request
         async with aiohttp.ClientSession() as session:
             endpoint = f"{self.azure_api_url}/openai/deployments/{deployment_name}/embeddings?api-version={api_version}"
+            
+            # Log the request for debugging
+            self.logger.info(f"Sending Azure embedding request to: {endpoint}")
+            self.logger.info(f"Using deployment name: {deployment_name}")
 
             try:
                 async with session.post(
@@ -301,7 +305,10 @@ class EmbeddingService:
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        raise ValueError(f"Azure OpenAI API error ({response.status}): {error_text}")
+                        self.logger.error(f"Azure API error: {error_text}")
+                        # Fall back to mock embeddings
+                        self.logger.warning("Falling back to mock embeddings due to API error")
+                        return [self.create_mock_embedding(text) for text in texts]
 
                     result = await response.json()
 

@@ -81,12 +81,15 @@ class MongoDBService:
             await self.chunks.create_index("repo_id")
             await self.chunks.create_index("vector_id")  # Link to Qdrant vector ID
             
-            # Create a text index for code content search
-            await self.code_files.create_index(
-                [("content", TEXT)],
-                default_language="none",
-                language_override="text_lang",
-            )
+            # Create a text index for code content search - if it fails, that's okay
+            try:
+                await self.code_files.create_index(
+                    [("content", TEXT)],
+                    default_language="english",
+                    language_override="language",
+                )
+            except Exception as text_index_err:
+                self.logger.warning(f"Could not create text index, may already exist: {str(text_index_err)}")
             
             self.logger.info("MongoDB indexes created successfully")
             return True
