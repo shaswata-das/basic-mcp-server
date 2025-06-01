@@ -22,8 +22,9 @@ class QdrantVectorService:
         url: Optional[str] = None,
         api_key: Optional[str] = None,
         collection_name: str = "code_knowledge",
-        vector_size: int = 1536,  # Default for OpenAI embeddings
+        vector_size: int = 768,  # Default for OpenAI embeddings
         distance: str = "Cosine",
+        embedding_provider: str = "ollama",  # Added provider parameter
     ):
         """Initialize the Qdrant vector service
         
@@ -33,10 +34,21 @@ class QdrantVectorService:
             collection_name: Name of the collection to use
             vector_size: Size of the embedding vectors
             distance: Distance metric to use ("Cosine", "Euclid", or "Dot")
+            embedding_provider: Provider of embeddings (openai, ollama, etc.)
         """
         self.logger = logging.getLogger("mcp_server.services.qdrant")
         self.collection_name = collection_name
-        self.vector_size = vector_size
+        
+        # Set vector size based on embedding provider
+        # Different providers have different dimensions
+        if embedding_provider == "ollama":
+            # Ollama's models like nomic-embed-text typically use 768 dimensions
+            self.vector_size = 768
+        else:
+            # Use the provided vector size or default for OpenAI
+            self.vector_size = vector_size
+            
+        self.logger.info(f"Using vector size {self.vector_size} for {embedding_provider} embeddings")
         
         # Map string distance to enum
         distance_map = {

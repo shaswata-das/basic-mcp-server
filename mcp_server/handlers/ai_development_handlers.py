@@ -24,6 +24,8 @@ from mcp_server.services.knowledge_extraction.call_graph_analyzer import CallGra
 from mcp_server.services.knowledge_extraction.pattern_extractor import PatternExtractor
 from mcp_server.services.knowledge_extraction.environment_analyzer import EnvironmentAnalyzer
 from mcp_server.services.knowledge_extraction.md_builder import MarkdownBuilder
+from mcp_server.services.knowledge_extraction.documentation_extractor import DocumentationExtractor
+from mcp_server.services.knowledge_extraction.code_chunker import CodeChunker
 
 
 class CodebaseAnalysisHandler(HandlerInterface):
@@ -51,6 +53,8 @@ class CodebaseAnalysisHandler(HandlerInterface):
         
         # Initialize extraction services
         self.code_extractor = CodeExtractor()
+        self.doc_extractor = DocumentationExtractor()
+        self.code_chunker = CodeChunker()
         self.call_graph_analyzer = CallGraphAnalyzer()
         self.pattern_extractor = PatternExtractor()
         self.environment_analyzer = EnvironmentAnalyzer()
@@ -270,7 +274,28 @@ class CodebaseAnalysisHandler(HandlerInterface):
 
                 # Extract knowledge from file
                 try:
-                    result = await self.code_extractor.extract_knowledge_from_file(file_path, language)
+                    # Extract code knowledge
+                    code_result = await self.code_extractor.extract_knowledge_from_file(file_path, language)
+                    
+                    # Extract documentation
+                    doc_result = await self.doc_extractor.extract_documentation(file_path, language)
+                    
+                    # Generate code chunks for semantic search
+                    chunks = await self.code_chunker.chunk_file(file_path, language)
+                    
+                    # Combine results
+                    result = {
+                        **code_result,
+                        "documentation": doc_result,
+                        "chunks": [
+                            {
+                                "type": chunk["type"],
+                                "content_preview": chunk["content"][:200] + "..." if len(chunk["content"]) > 200 else chunk["content"],
+                                "metadata": chunk["metadata"]
+                            } 
+                            for chunk in chunks
+                        ]
+                    }
 
                     # Store in MongoDB
                     try:
@@ -278,7 +303,8 @@ class CodebaseAnalysisHandler(HandlerInterface):
                         # This prevents issues with unsupported language overrides
                         sanitized_metadata = {}
                         for key, value in result.items():
-                            sanitized_metadata[key] = value
+                            if key != "chunks":  # Don't store full chunks in metadata
+                                sanitized_metadata[key] = value
                         
                         # For C# files, use a different language string to avoid MongoDB issues
                         safe_language = "csharp_safe" if language.lower() == "csharp" else language
@@ -298,6 +324,24 @@ class CodebaseAnalysisHandler(HandlerInterface):
                             }},
                             upsert=True
                         )
+                        
+                        # Store code chunks separately for better vector search
+                        for i, chunk in enumerate(chunks):
+                            chunk_id = f"{file_id}_chunk_{i}"
+                            await self.mongodb_service.chunks.update_one(
+                                {"chunk_id": chunk_id},
+                                {"$set": {
+                                    "chunk_id": chunk_id,
+                                    "file_id": file_id,
+                                    "repo_id": repo_id,
+                                    "type": chunk["type"],
+                                    "content": chunk["content"],
+                                    "language": safe_language,
+                                    "metadata": chunk["metadata"],
+                                    "updated_at": datetime.datetime.now()
+                                }},
+                                upsert=True
+                            )
                     except Exception as mongo_err:
                         self.logger.warning(f"MongoDB error for file {file_path}: {str(mongo_err)}")
                         file_id = str(uuid.uuid4())  # Generate ID even if storage fails
@@ -307,7 +351,8 @@ class CodebaseAnalysisHandler(HandlerInterface):
                         "file_path": file_path,
                         "code_language": language,
                         "result": result,
-                        "file_id": file_id
+                        "file_id": file_id,
+                        "chunk_count": len(chunks)
                     })
                     
                     file_count += 1
@@ -457,14 +502,38 @@ class CodebaseAnalysisHandler(HandlerInterface):
         # Create collection for this repository
         collection_name = f"repo_{repo_id}_knowledge"
         
-        # Determine vector size based on embedding model
-        vector_size = 1536  # Default for OpenAI embeddings
-        if hasattr(self.embedding_service, "model") and self.embedding_service.model == "text-embedding-3-large":
-            vector_size = 3072
+        # Determine embedding provider and model information
+        embedding_provider = "ollama"  # Default provider
+        vector_size = 768  # Default for Ollama embeddings
         
-        # Set the collection name for the vector service and initialize
-        self.vector_service.collection_name = collection_name
-        self.vector_service.vector_size = vector_size
+        # Get provider from embedding service
+        if hasattr(self.embedding_service, "provider"):
+            embedding_provider = self.embedding_service.provider
+            self.logger.info(f"Using embedding provider: {embedding_provider}")
+        
+        # Determine vector size based on provider and model
+        if embedding_provider == "ollama":
+            # Ollama typically uses 768 dimensions (nomic-embed-text, all-minilm, etc.)
+            vector_size = 768
+            self.logger.info(f"Using Ollama embeddings with {vector_size} dimensions")
+        elif hasattr(self.embedding_service, "model"):
+            # For other providers, check the model
+            if self.embedding_service.model == "text-embedding-3-large":
+                vector_size = 3072
+            elif self.embedding_service.model == "text-embedding-3-small":
+                vector_size = 1536
+            self.logger.info(f"Using {self.embedding_service.model} embeddings with {vector_size} dimensions")
+        
+        # Create a new vector service with the correct configuration
+        # This ensures we're using the right vector size for the embedding model
+        from mcp_server.services.vector_store.qdrant_service import QdrantVectorService
+        self.vector_service = QdrantVectorService(
+            collection_name=collection_name,
+            vector_size=vector_size,
+            embedding_provider=embedding_provider
+        )
+        
+        # Initialize the reconfigured vector service
         await self.vector_service.initialize()
         
         # Store embeddings for documentation pages
@@ -546,47 +615,75 @@ class CodebaseAnalysisHandler(HandlerInterface):
                             }
                         )
         
-        # Store embeddings for code files
+        # Store embeddings for chunks using the improved code chunker
         for file_info in knowledge.get("files", [])[:100]:  # Limit to 100 files for performance
             file_path = file_info.get("file_path")
             if not file_path:
                 continue
                 
             language = file_info.get("code_language", "unknown")
-            namespace = file_info.get("namespace", "unknown")
             
-            # Create text representation for embedding
-            file_text = f"""
-File: {file_path}
-Language: {language}
-Namespace: {namespace}
-
-Classes:
-{self._format_classes_for_embedding(file_info.get("classes", []))}
-
-Interfaces:
-{self._format_interfaces_for_embedding(file_info.get("interfaces", []))}
-"""
-            
-            # Generate embedding
-            embedding = await self.embedding_service.get_embedding(file_text)
-            
-            # Store in vector database
-            file_id = f"{repo_id}:{file_path}"
-            # Use the correct method from QdrantVectorService
-            await self.vector_service.store_code_chunk(
-                embedding=embedding,
-                code_text=file_text,
-                metadata={
-                    "id": file_id,
-                    "file_path": file_path,
-                    "code_language": language,
-                    "namespace": namespace,
-                    "type": "file",
-                    "repo_id": repo_id
-                },
-                chunk_id=file_id
-            )
+            try:
+                # Generate chunks for this file
+                chunks = await self.code_chunker.chunk_file(file_path, language)
+                
+                # Store each chunk separately with its own embedding
+                for chunk in chunks:
+                    # Generate embedding for this chunk
+                    chunk_embedding = await self.embedding_service.get_embedding(chunk["content"])
+                    
+                    # Create chunk ID
+                    chunk_id = f"{repo_id}:{file_path}:{chunk['type']}:{uuid.uuid4()}"
+                    
+                    # Store in vector database with rich metadata
+                    await self.vector_service.store_code_chunk(
+                        embedding=chunk_embedding,
+                        code_text=chunk["content"],
+                        metadata={
+                            "id": chunk_id,
+                            "file_path": file_path,
+                            "code_language": language,
+                            "type": chunk["type"],
+                            "repo_id": repo_id,
+                            **chunk["metadata"]  # Include all chunk metadata
+                        },
+                        chunk_id=chunk_id
+                    )
+                    
+                    self.logger.debug(f"Stored chunk {chunk_id} of type {chunk['type']}")
+                
+                # Also store documentation with embeddings if available
+                if "documentation" in file_info and file_info["documentation"]:
+                    doc = file_info["documentation"]
+                    
+                    # For each documentation element (class docs, function docs, etc.)
+                    for doc_type, doc_items in doc.items():
+                        if isinstance(doc_items, list) and doc_items:
+                            for item in doc_items:
+                                if "docstring" in item and item["docstring"]:
+                                    # Generate embedding for this documentation
+                                    doc_embedding = await self.embedding_service.get_embedding(item["docstring"])
+                                    
+                                    # Create doc ID
+                                    doc_id = f"{repo_id}:{file_path}:doc:{doc_type}:{uuid.uuid4()}"
+                                    
+                                    # Store in vector database
+                                    await self.vector_service.store_code_chunk(
+                                        embedding=doc_embedding,
+                                        code_text=item["docstring"],
+                                        metadata={
+                                            "id": doc_id,
+                                            "file_path": file_path,
+                                            "code_language": language,
+                                            "type": "documentation",
+                                            "doc_type": doc_type,
+                                            "name": item.get("name", ""),
+                                            "repo_id": repo_id
+                                        },
+                                        chunk_id=doc_id
+                                    )
+            except Exception as chunk_err:
+                self.logger.warning(f"Error chunking/embedding file {file_path}: {str(chunk_err)}")
     
     def _format_classes_for_embedding(self, classes: List[Dict[str, Any]]) -> str:
         """Format classes for embedding
@@ -677,16 +774,38 @@ class CodeSearchHandler(HandlerInterface):
         # Generate embedding for the query
         embedding = await self.embedding_service.get_embedding(query)
         
-        # Prepare search filter
+        # Prepare search filter with enhanced type filtering
         filter_params = {"repo_id": repo_id}
         
         if search_type == "code":
-            filter_params["type"] = "file"
+            # Allow searching for specific code structures
+            code_type = params.get("code_type")
+            if code_type:
+                if code_type in ["class", "interface", "method", "function"]:
+                    filter_params["type"] = code_type
+            else:
+                # Use a simple value instead of complex filter for Qdrant compatibility
+                filter_params["type"] = "file"  # Default to searching files
         elif search_type == "documentation":
             filter_params["type"] = "documentation"
+        elif search_type == "chunks":
+            # Allow searching for specific chunk types
+            chunk_type = params.get("chunk_type")
+            if chunk_type:
+                filter_params["type"] = chunk_type
         
         if language:
             filter_params["code_language"] = language
+            
+        # Allow filtering by class or component name
+        class_name = params.get("class_name")
+        if class_name:
+            filter_params["class_name"] = class_name
+            
+        # Allow filtering by filename
+        filename = params.get("filename")
+        if filename:
+            filter_params["filename"] = filename
         
         # Search vector database
         collection_name = f"repo_{repo_id}_knowledge"
@@ -719,8 +838,8 @@ class CodeSearchHandler(HandlerInterface):
             "results": results
         }
     
-    def _create_content_preview(self, content: str, max_length: int = 200) -> str:
-        """Create a preview of content
+    def _create_content_preview(self, content: str, max_length: int = 300) -> str:
+        """Create a preview of content with better formatting
         
         Args:
             content: Content to preview
@@ -732,13 +851,35 @@ class CodeSearchHandler(HandlerInterface):
         if not content:
             return ""
         
-        # Remove extra whitespace
-        content = " ".join(content.split())
+        # Split into lines for better formatting
+        lines = content.split('\n')
         
-        if len(content) <= max_length:
-            return content
+        # If it's just one line
+        if len(lines) == 1:
+            if len(content) <= max_length:
+                return content
+            return content[:max_length] + "..."
         
-        return content[:max_length] + "..."
+        # For multi-line content, try to keep structure
+        preview_lines = []
+        char_count = 0
+        
+        for line in lines:
+            line_len = len(line)
+            
+            if char_count + line_len > max_length:
+                # If we can add a partial line, do so
+                if char_count < max_length - 3:  # Leave space for "..."
+                    remaining = max_length - char_count - 3
+                    preview_lines.append(line[:remaining] + "...")
+                else:
+                    preview_lines.append("...")
+                break
+            
+            preview_lines.append(line)
+            char_count += line_len + 1  # +1 for newline
+        
+        return '\n'.join(preview_lines)
 
 
 class KnowledgeGraphQueryHandler(HandlerInterface):

@@ -37,7 +37,16 @@ async def analyze_repository(repo_path, output_dir, file_limit=1000):
     
     # Create services
     mongodb_service = MongoDBService(uri="mongodb://localhost:27017", db_name="mcp-server")
-    embedding_service = EmbeddingService(model="text-embedding-3-small")
+    
+    # Configure embedding service to use Ollama by default
+    ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:5656")
+    ollama_model = os.environ.get("OLLAMA_MODEL", "nomic-embed-text")
+    embedding_service = EmbeddingService(
+        model="text-embedding-3-small",  # Fallback model if Ollama is not available
+        ollama_url=ollama_url,
+        ollama_model=ollama_model
+    )
+    
     from mcp_server.services.secrets_manager import get_secrets_manager
     secrets = get_secrets_manager()
     qdrant_url = secrets.get("QDRANT_URL")
@@ -166,6 +175,12 @@ async def main():
     parser.add_argument("--file-limit", dest="file_limit", type=int,
                         default=int(os.environ.get("FILE_LIMIT", 500)),
                         help="Maximum number of files to analyze")
+    parser.add_argument("--ollama-url", dest="ollama_url", 
+                        default=os.environ.get("OLLAMA_URL", "http://localhost:5656"),
+                        help="URL for Ollama API server")
+    parser.add_argument("--ollama-model", dest="ollama_model", 
+                        default=os.environ.get("OLLAMA_MODEL", "nomic-embed-text"),
+                        help="Ollama model to use for embeddings")
 
     args = parser.parse_args()
 
@@ -176,8 +191,13 @@ async def main():
     output_dir = args.output_dir
     file_limit = args.file_limit
     
+    # Set Ollama environment variables for embedding service
+    os.environ["OLLAMA_URL"] = args.ollama_url
+    os.environ["OLLAMA_MODEL"] = args.ollama_model
+    
     # Run analysis
     print(f"=== ANALYZING REPOSITORY: {repo_path} ===")
+    print(f"Using Ollama at {args.ollama_url} with model {args.ollama_model}")
     repo_id = await analyze_repository(repo_path, output_dir, file_limit)
     
     if repo_id:
