@@ -533,22 +533,40 @@ class CallGraphAnalyzer:
         patterns = []
         
         # Check for MVC pattern
-        mvc_components = {
-            "controllers": 0,
-            "models": 0,
-            "views": 0
+        mvc_sets = {
+            "controllers": set(),
+            "models": set(),
+            "views": set()
         }
-        
+
         for node_id in self.call_graph.nodes():
             node_data = self.call_graph.nodes[node_id]
-            
-            # Check node name for pattern indicators
-            if "controller" in node_id.lower():
-                mvc_components["controllers"] += 1
-            elif "model" in node_id.lower():
-                mvc_components["models"] += 1
-            elif "view" in node_id.lower():
-                mvc_components["views"] += 1
+
+            node_name = node_id.lower()
+            class_name = str(node_data.get("class_name", "")).lower()
+            file_path = str(node_data.get("file_path", "")).lower()
+
+            # Determine if this node represents a controller, model, or view
+            if (
+                "controller" in node_name
+                or "controller" in class_name
+                or "controllers" in file_path
+            ):
+                mvc_sets["controllers"].add(node_id)
+            elif (
+                "model" in node_name
+                or "model" in class_name
+                or "models" in file_path
+            ):
+                mvc_sets["models"].add(node_id)
+            elif (
+                "view" in node_name
+                or "view" in class_name
+                or "views" in file_path
+            ):
+                mvc_sets["views"].add(node_id)
+
+        mvc_components = {k: len(v) for k, v in mvc_sets.items()}
         
         # If we have all three MVC components, it's likely an MVC pattern
         if all(count > 0 for count in mvc_components.values()):
