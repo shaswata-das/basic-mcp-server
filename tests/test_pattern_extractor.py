@@ -332,3 +332,59 @@ class TestPatternExtractor:
         
         assert not any("node_modules" in source for source in all_sources)
         assert not any(".min.js" in source for source in all_sources)
+
+
+def test_strategy_pattern_detection(pattern_extractor):
+    """Verify Strategy Pattern is detected from call graph results."""
+    extractor = pattern_extractor
+    extractor.patterns_found = {
+        "design_patterns": [],
+        "architectural_patterns": [],
+        "code_organization": [],
+        "language_specific": {}
+    }
+
+    call_graph_results = {
+        "patterns": [],
+        "nodes": [
+            {"id": "IStrategy", "type": "interface"},
+            {"id": "StrategyA", "type": "class"},
+            {"id": "StrategyB", "type": "class"}
+        ],
+        "edges": [
+            {"source": "IStrategy", "target": "StrategyA", "type": "di_registration"},
+            {"source": "IStrategy", "target": "StrategyB", "type": "di_registration"}
+        ]
+    }
+
+    extractor._analyze_call_graph_patterns(call_graph_results)
+
+    names = [p["name"] for p in extractor.patterns_found["design_patterns"]]
+    assert "Strategy Pattern" in names
+
+
+def test_no_strategy_with_single_impl(pattern_extractor):
+    """Ensure Strategy Pattern is not flagged when only one implementation exists."""
+    extractor = pattern_extractor
+    extractor.patterns_found = {
+        "design_patterns": [],
+        "architectural_patterns": [],
+        "code_organization": [],
+        "language_specific": {}
+    }
+
+    call_graph_results = {
+        "patterns": [],
+        "nodes": [
+            {"id": "IHandler", "type": "interface"},
+            {"id": "OnlyHandler", "type": "class"}
+        ],
+        "edges": [
+            {"source": "IHandler", "target": "OnlyHandler", "type": "di_registration"}
+        ]
+    }
+
+    extractor._analyze_call_graph_patterns(call_graph_results)
+
+    names = [p["name"] for p in extractor.patterns_found["design_patterns"]]
+    assert "Strategy Pattern" not in names

@@ -355,6 +355,8 @@ class PatternExtractor:
                 self._add_design_pattern("Factory Pattern", confidence, "call_graph_analysis")
             elif "Dependency Injection" in pattern_name:
                 self._add_design_pattern("Dependency Injection", confidence, "call_graph_analysis")
+            elif "Strategy" in pattern_name:
+                self._add_design_pattern("Strategy Pattern", confidence, "call_graph_analysis")
         
         # Analyze graph structure for layered architecture
         nodes = call_graph_results.get("nodes", [])
@@ -371,9 +373,37 @@ class PatternExtractor:
         # Check for hexagonal/clean architecture
         interfaces = sum(1 for node in nodes if node.get("type") == "interface")
         implementations = sum(1 for node in nodes if node.get("type") == "class" and "impl" in node.get("id", "").lower())
-        
+
         if interfaces > 5 and implementations > 5:
             self._add_architectural_pattern("Hexagonal/Clean Architecture", "medium", "call_graph_analysis")
+
+        # Strategy pattern detection using edges
+        edges = call_graph_results.get("edges", [])
+        node_lookup = {n.get("id"): n for n in nodes}
+        interface_impls: Dict[str, Set[str]] = {}
+
+        for edge in edges:
+            etype = edge.get("type")
+            src = edge.get("source")
+            dst = edge.get("target")
+
+            if etype == "di_registration":
+                interface_node = src
+                class_node = dst
+            elif etype in ("implements", "inherits"):
+                interface_node = dst
+                class_node = src
+            else:
+                continue
+
+            if node_lookup.get(interface_node, {}).get("type") == "interface":
+                interface_impls.setdefault(interface_node, set()).add(class_node)
+
+        for _, impls in interface_impls.items():
+            if len(impls) > 1:
+                confidence = "high" if len(impls) >= 3 else "medium"
+                self._add_design_pattern("Strategy Pattern", confidence, "call_graph_analysis")
+                break
     
     async def _analyze_folder_structure(self, repo_path: str) -> None:
         """Analyze repository folder structure for code organization patterns
