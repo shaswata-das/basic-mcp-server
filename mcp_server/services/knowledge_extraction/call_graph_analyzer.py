@@ -608,14 +608,44 @@ class CallGraphAnalyzer:
             (src, dst) for src, dst, data in self.call_graph.edges(data=True)
             if data.get("type") == "di_registration"
         ]
-        
+
         if di_edges:
             patterns.append({
                 "name": "Dependency Injection",
                 "confidence": "high",
                 "components": {"di_registrations": len(di_edges)}
             })
-        
+
+        # Check for Strategy pattern: interfaces with multiple implementations
+        interface_nodes = [
+            n for n, d in self.call_graph.nodes(data=True)
+            if d.get("type") == "interface"
+        ]
+
+        for interface in interface_nodes:
+            implementations: Set[str] = set()
+
+            # Implementations via DI registration (interface -> class)
+            for _src, dst, data in self.call_graph.out_edges(interface, data=True):
+                if data.get("type") == "di_registration":
+                    implementations.add(dst)
+
+            # Implementations via inheritance or explicit implements
+            for src, _dst, data in self.call_graph.in_edges(interface, data=True):
+                if data.get("type") in ("implements", "inherits"):
+                    implementations.add(src)
+
+            if len(implementations) > 1:
+                patterns.append({
+                    "name": "Strategy Pattern",
+                    "confidence": "high" if len(implementations) >= 3 else "medium",
+                    "components": {
+                        "interface": interface,
+                        "implementations": len(implementations)
+                    }
+                })
+                break
+
         return patterns
 
     def export_graph_to_json(self, output_path: str) -> str:
