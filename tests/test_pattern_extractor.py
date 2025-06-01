@@ -8,6 +8,7 @@ import shutil
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from mcp_server.services.knowledge_extraction.pattern_extractor import PatternExtractor
+from mcp_server.services.knowledge_extraction.call_graph_analyzer import CallGraphAnalyzer
 
 class TestPatternExtractor:
     
@@ -388,3 +389,45 @@ def test_no_strategy_with_single_impl(pattern_extractor):
 
     names = [p["name"] for p in extractor.patterns_found["design_patterns"]]
     assert "Strategy Pattern" not in names
+
+@pytest.mark.asyncio
+async def test_mvc_detection_with_folder_names():
+    """CallGraphAnalyzer should detect MVC pattern using folder names."""
+    repo_dir = tempfile.mkdtemp()
+
+    try:
+        os.makedirs(os.path.join(repo_dir, "controllers"), exist_ok=True)
+        os.makedirs(os.path.join(repo_dir, "models"), exist_ok=True)
+        os.makedirs(os.path.join(repo_dir, "views"), exist_ok=True)
+
+        files = [
+            {
+                "file_path": os.path.join(repo_dir, "controllers", "user_controller.py"),
+                "code_language": "python",
+                "classes": [{"name": "UserController", "methods": []}],
+            },
+            {
+                "file_path": os.path.join(repo_dir, "models", "user_model.py"),
+                "code_language": "python",
+                "classes": [{"name": "UserModel", "methods": []}],
+            },
+            {
+                "file_path": os.path.join(repo_dir, "views", "user_view.py"),
+                "code_language": "python",
+                "functions": [{"name": "render_user"}],
+            },
+        ]
+
+        analyzer = CallGraphAnalyzer()
+        results = await analyzer.analyze_codebase(repo_dir, files)
+
+        patterns = results.get("patterns", [])
+        mvc = next((p for p in patterns if "MVC" in p["name"]), None)
+
+        assert mvc is not None, "MVC pattern not detected"
+        assert mvc["components"]["controllers"] == 1
+        assert mvc["components"]["models"] == 1
+        assert mvc["components"]["views"] == 1
+    finally:
+        shutil.rmtree(repo_dir)
+
