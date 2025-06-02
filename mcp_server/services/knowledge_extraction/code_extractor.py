@@ -106,35 +106,149 @@ class CodeExtractor:
             
             class_content = content[start_pos:end_pos]
             
-            # Find methods
+            # Extract methods with a pattern that captures return types
             methods = []
-            method_matches = re.finditer(
-                r'(?:public|private|protected|internal)?\s*(?:static|virtual|abstract|override)?\s*(?:[a-zA-Z0-9_<>]+)\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)',
-                class_content
-            )
+            
+            # This pattern captures access modifiers, return type, method name, and parameters
+            method_pattern = r'^\s*((?:public|private|protected|internal)\s+(?:static|virtual|abstract|override|async)?\s*([a-zA-Z0-9_<>\[\].]+)\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\))'
+            
+            # Find method declarations
+            method_matches = re.finditer(method_pattern, class_content, re.MULTILINE)
             
             for m_match in method_matches:
-                method_name = m_match.group(1)
-                parameters_str = m_match.group(2)
-                parameters = [p.strip() for p in parameters_str.split(',')] if parameters_str else []
+                method_signature = m_match.group(1)
+                return_type = m_match.group(2)
+                method_name = m_match.group(3)
+                parameters_str = m_match.group(4)
+                
+                # Skip if method name is a C# keyword
+                if method_name.lower() in ["if", "for", "while", "switch", "foreach", "using", "return", "throw"]:
+                    continue
+                
+                # Properly extract parameter list with types
+                parameters = []
+                if parameters_str.strip():
+                    # Extract typed parameters like "int foo, string bar"
+                    param_parts = parameters_str.split(',')
+                    for part in param_parts:
+                        part = part.strip()
+                        if part:
+                            parameters.append(part)
                 
                 methods.append({
                     "name": method_name,
-                    "parameters": parameters
+                    "return_type": return_type,
+                    "parameters": parameters,
+                    "signature": method_signature
                 })
+                
+            # If no methods found with strict pattern, try a more lenient one
+            if not methods:
+                method_pattern = r'(?:public|private|protected|internal)\s+(?:static|virtual|abstract|override|async)?\s*([a-zA-Z0-9_<>\[\].]+)\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)'
+                method_matches = re.finditer(method_pattern, class_content)
+                
+                for m_match in method_matches:
+                    return_type = m_match.group(1)
+                    method_name = m_match.group(2)
+                    parameters_str = m_match.group(3)
+                    
+                    # Skip if method name is a C# keyword
+                    if method_name.lower() in ["if", "for", "while", "switch", "foreach", "using", "return", "throw"]:
+                        continue
+                    
+                    # Properly extract parameter list
+                    parameters = []
+                    if parameters_str.strip():
+                        param_parts = parameters_str.split(',')
+                        for part in param_parts:
+                            part = part.strip()
+                            if part:
+                                parameters.append(part)
+                    
+                    methods.append({
+                        "name": method_name,
+                        "return_type": return_type,
+                        "parameters": parameters
+                    })
             
-            # Find properties
+            # Find properties with improved pattern that actually matches C# properties
             properties = []
+            # This pattern matches standard property declarations with get/set
             property_matches = re.finditer(
-                r'(?:public|private|protected|internal)?\s*(?:static|virtual|abstract|override)?\s*(?:[a-zA-Z0-9_<>]+)\s+([a-zA-Z0-9_]+)\s*{\s*(?:get;)?\s*(?:set;)?',
+                r'(?:public|private|protected|internal)\s+(?:virtual|abstract|override|static|readonly)?\s*(?:[a-zA-Z0-9_<>\.]+)\s+([a-zA-Z0-9_]+)\s*{\s*(?:get|set)', 
                 class_content
             )
             
             for p_match in property_matches:
                 property_name = p_match.group(1)
+                # Skip if it's clearly not a property (e.g., a method that has "get" in its name)
+                if property_name.lower() in ["if", "for", "while", "switch", "foreach", "return"]:
+                    continue
+                    
                 properties.append({
                     "name": property_name
                 })
+                
+            # Also look for auto-implemented properties (newer C# syntax)
+            auto_property_matches = re.finditer(
+                r'(?:public|private|protected|internal)\s+(?:virtual|abstract|override|static|readonly)?\s*(?:[a-zA-Z0-9_<>\.]+)\s+([a-zA-Z0-9_]+)\s*{\s*(?:get;|set;)',
+                class_content
+            )
+            
+            for p_match in auto_property_matches:
+                property_name = p_match.group(1)
+                if property_name not in [p["name"] for p in properties]:  # Avoid duplicates
+                    properties.append({
+                        "name": property_name
+                    })
+                    
+            # Also capture fields with any order of modifiers
+            field_matches = re.finditer(
+                r'(?:public|private|protected|internal)\s+(?:(?:static|readonly|const)\s+)*(?:[a-zA-Z0-9_<>\.]+)\s+([a-zA-Z0-9_]+)\s*(?:=\s*[^;]+)?;',
+                class_content
+            )
+            
+            for f_match in field_matches:
+                field_name = f_match.group(1)
+                # Skip if it's a common temporary variable name
+                if field_name.lower() in ["i", "j", "k", "temp", "tmp", "value", "index"]:
+                    continue
+                    
+                # Add as a field-based property
+                if field_name not in [p["name"] for p in properties]:  # Avoid duplicates
+                    properties.append({
+                        "name": field_name,
+                        "is_field": True
+                    })
+                    
+            # Also match const fields with any modifier order
+            const_matches = re.finditer(
+                r'(?:public|private|protected|internal)?\s+(?:static\s+)?const\s+(?:[a-zA-Z0-9_<>\.]+)\s+([a-zA-Z0-9_]+)\s*=',
+                class_content
+            )
+            
+            for c_match in const_matches:
+                const_name = c_match.group(1)
+                # Add as a constant field
+                if const_name not in [p["name"] for p in properties]:  # Avoid duplicates
+                    properties.append({
+                        "name": const_name,
+                        "is_constant": True
+                    })
+                    
+            # Match static readonly fields (like Log instances)
+            readonly_matches = re.finditer(
+                r'(?:public|private|protected|internal)?\s+static\s+readonly\s+(?:[a-zA-Z0-9_<>\.]+)\s+([a-zA-Z0-9_]+)\s*=',
+                class_content
+            )
+            
+            for r_match in readonly_matches:
+                readonly_name = r_match.group(1)
+                if readonly_name not in [p["name"] for p in properties]:  # Avoid duplicates
+                    properties.append({
+                        "name": readonly_name,
+                        "is_readonly": True
+                    })
             
             classes.append({
                 "name": class_name,
@@ -237,21 +351,94 @@ class CodeExtractor:
                 if selector_match:
                     selector = selector_match.group(1)
             
-            # Find methods
+            # Find methods with more comprehensive pattern for actual method declarations
             methods = []
-            method_matches = re.finditer(
-                r'(?:public|private|protected)?\s*(?:static|async)?\s*([a-zA-Z0-9_]+)\s*\(([^)]*)\)',
-                content
-            )
+            
+            # This pattern matches class methods with proper context
+            # It looks for methods within class definition and ensures it's not a method call
+            class_method_pattern = r'(?:\/\/.*\n|\/\*.*?\*\/\s*)*(?:public|private|protected)?\s*(?:static|async)?\s*([a-zA-Z0-9_]+)\s*\(([^)]*)\)\s*(?:{|=>)'
+            method_matches = re.finditer(class_method_pattern, content)
             
             for m_match in method_matches:
                 method_name = m_match.group(1)
+                full_match = m_match.group(0)
+                
+                # Skip if method name is a JavaScript/TypeScript keyword or common function call
+                if method_name in ["if", "for", "while", "switch", "function", "return", "throw", "constructor"]:
+                    continue
+                
+                # Skip if it looks like a function call rather than declaration (check indentation)
+                if re.search(r'^\s{4,}', full_match, re.MULTILINE):
+                    # It's likely a method call inside another method
+                    continue
+                
+                parameters_str = m_match.group(2)
+                parameters = []
+                
+                # Process parameters more carefully
+                if parameters_str.strip():
+                    # Split by commas but handle complex cases better
+                    param_parts = []
+                    in_object = 0
+                    in_array = 0
+                    in_generic = 0
+                    current_part = ""
+                    
+                    for char in parameters_str:
+                        if char == '{': in_object += 1
+                        elif char == '}': in_object -= 1
+                        elif char == '[': in_array += 1
+                        elif char == ']': in_array -= 1
+                        elif char == '<': in_generic += 1
+                        elif char == '>': in_generic -= 1
+                        elif char == ',' and in_object == 0 and in_array == 0 and in_generic == 0:
+                            param_parts.append(current_part.strip())
+                            current_part = ""
+                            continue
+                            
+                        current_part += char
+                    
+                    if current_part.strip():
+                        param_parts.append(current_part.strip())
+                    
+                    # Process each parameter part
+                    for part in param_parts:
+                        # Extract parameter name and type (TypeScript)
+                        param_match = re.search(r'(?:readonly)?\s*([a-zA-Z0-9_]+)\s*(?::\s*([^=]+))?(?:\s*=\s*([^,]+))?', part)
+                        if param_match:
+                            param_name = param_match.group(1)
+                            param_type = param_match.group(2).strip() if param_match.group(2) else "any"
+                            parameters.append(f"{param_name}: {param_type}")
+                        else:
+                            # Fallback for complex cases
+                            parameters.append(part)
+                
+                methods.append({
+                    "name": method_name,
+                    "parameters": parameters,
+                    "full_signature": full_match.strip()
+                })
+                
+            # Also look for standalone functions
+            function_pattern = r'(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_]+)\s*\(([^)]*)\)\s*{'
+            function_matches = re.finditer(function_pattern, content)
+            
+            for m_match in function_matches:
+                function_name = m_match.group(1)
+                full_match = m_match.group(0)
+                
+                # Skip if nested function inside another function (check indentation)
+                if re.search(r'^\s{4,}', full_match, re.MULTILINE):
+                    continue
+                    
                 parameters_str = m_match.group(2)
                 parameters = [p.strip() for p in parameters_str.split(',')] if parameters_str else []
                 
                 methods.append({
-                    "name": method_name,
-                    "parameters": parameters
+                    "name": function_name,
+                    "parameters": parameters,
+                    "is_function": True,
+                    "full_signature": full_match.strip()
                 })
             
             # Find properties with decorators (for Angular)

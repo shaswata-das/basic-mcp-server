@@ -196,13 +196,29 @@ The codebase is organized into the following main components:
                                 else:
                                     f.write("**No inheritance**\n\n")
                                 
-                                # Add methods
+                                # Add methods with improved formatting that includes return types
                                 methods = cls.get("methods", [])
                                 if methods:
                                     f.write("#### Methods\n\n")
-                                    for method in methods:
-                                        params = method.get("parameters", [])
-                                        f.write(f"- `{method.get('name')}({', '.join(params)})`\n")
+                                    
+                                    # Sort methods alphabetically
+                                    sorted_methods = sorted(methods, key=lambda m: m.get('name', '').lower())
+                                    
+                                    for method in sorted_methods:
+                                        method_name = method.get('name', '')
+                                        
+                                        # Only process valid method names
+                                        if method_name and not method_name.lower() in ["if", "for", "while", "switch"]:
+                                            return_type = method.get("return_type", "")
+                                            params = method.get("parameters", [])
+                                            param_str = ', '.join(p for p in params if p)
+                                            
+                                            # Add method with its return type and parameters
+                                            if return_type:
+                                                f.write(f"- `{return_type} {method_name}({param_str})`\n")
+                                            else:
+                                                f.write(f"- `{method_name}({param_str})`\n")
+                                    
                                     f.write("\n")
                                 
                                 # Add properties

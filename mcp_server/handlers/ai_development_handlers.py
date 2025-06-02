@@ -632,8 +632,11 @@ class CodebaseAnalysisHandler(HandlerInterface):
                     # Generate embedding for this chunk
                     chunk_embedding = await self.embedding_service.get_embedding(chunk["content"])
                     
-                    # Create chunk ID
-                    chunk_id = f"{repo_id}:{file_path}:{chunk['type']}:{uuid.uuid4()}"
+                    # Create chunk ID using hashing to ensure valid UUID
+                    import hashlib
+                    # Create a deterministic but unique hash from the components
+                    hash_input = f"{repo_id}:{file_path}:{chunk['type']}:{uuid.uuid4()}"
+                    chunk_id = str(uuid.UUID(hashlib.md5(hash_input.encode()).hexdigest()))
                     
                     # Store in vector database with rich metadata
                     await self.vector_service.store_code_chunk(
@@ -664,8 +667,9 @@ class CodebaseAnalysisHandler(HandlerInterface):
                                     # Generate embedding for this documentation
                                     doc_embedding = await self.embedding_service.get_embedding(item["docstring"])
                                     
-                                    # Create doc ID
-                                    doc_id = f"{repo_id}:{file_path}:doc:{doc_type}:{uuid.uuid4()}"
+                                    # Create doc ID using hashing to ensure valid UUID
+                                    hash_input = f"{repo_id}:{file_path}:doc:{doc_type}:{uuid.uuid4()}"
+                                    doc_id = str(uuid.UUID(hashlib.md5(hash_input.encode()).hexdigest()))
                                     
                                     # Store in vector database
                                     await self.vector_service.store_code_chunk(
